@@ -33,8 +33,11 @@ export default function AuthPage() {
   });
 
   const onRegister = registerForm.handleSubmit(async (data) => {
-    const privateKey = secp.utils.bytesToHex(secp.utils.randomPrivateKey());
-    const publicKey = secp.utils.bytesToHex(secp.schnorr.getPublicKey(privateKey));
+    // Generate Nostr keypair
+    const privateKeyBytes = secp.utils.randomPrivateKey();
+    const privateKey = secp.utils.bytesToHex(privateKeyBytes);
+    const publicKeyBytes = secp.schnorr.getPublicKey(privateKeyBytes);
+    const publicKey = secp.utils.bytesToHex(publicKeyBytes);
 
     registerMutation.mutate({
       ...data,

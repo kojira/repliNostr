@@ -8,7 +8,7 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   publicKey: text("public_key").notNull(),
   privateKey: text("private_key").notNull(),
-  following: text("following").array()
+  following: text("following").array().default([]).notNull()
 });
 
 export const posts = pgTable("posts", {
