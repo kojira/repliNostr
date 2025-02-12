@@ -35,7 +35,7 @@ export function useNostr() {
   const pendingMetadataRequests = useRef<Set<string>>(new Set());
   const metadataUpdateQueue = useRef<Set<string>>(new Set());
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const batchSize = 20; // 一度に処理するメタデータの最大数
+  const batchSize = 10; // バッチサイズを10に削減
   const retryCount = useRef<Map<string, number>>(new Map());
   const MAX_RETRIES = 3;
   const [isSubscriptionReady, setIsSubscriptionReady] = useState(false);
@@ -66,8 +66,6 @@ export function useNostr() {
       pendingMetadataRequests.current.add(key);
     });
 
-    console.log(`[Nostr] Processing metadata batch for pubkeys:`, unprocessedPubkeys);
-
     const subscriptionId = Math.random().toString(36).substring(7);
     activeSubscriptions.current.add(subscriptionId);
 
@@ -83,15 +81,12 @@ export function useNostr() {
 
     const timeoutId = setTimeout(() => {
       if (activeSubscriptions.current.has(subscriptionId)) {
-        console.log(`[Nostr] Metadata request timeout for pubkeys:`, unprocessedPubkeys);
         unprocessedPubkeys.forEach(pubkey => {
           const currentRetries = retryCount.current.get(pubkey) || 0;
           if (currentRetries < MAX_RETRIES) {
-            console.log(`[Nostr] Retrying metadata request for ${pubkey} (attempt ${currentRetries + 1}/${MAX_RETRIES})`);
             retryCount.current.set(pubkey, currentRetries + 1);
             metadataUpdateQueue.current.add(pubkey);
           } else {
-            console.log(`[Nostr] Max retries reached for ${pubkey}, storing error state`);
             metadataMemoryCache.set(pubkey, {
               data: { name: `nostr:${pubkey.slice(0, 8)}` },
               timestamp: Date.now(),
@@ -112,7 +107,6 @@ export function useNostr() {
 
           try {
             const metadata = JSON.parse(event.content) as UserMetadata;
-            console.log(`[Nostr] Received metadata for ${event.pubkey} in ${Date.now() - metadataStartTime}ms:`, metadata);
 
             // Update both memory cache and state
             const processedMetadata = {
@@ -135,7 +129,6 @@ export function useNostr() {
             // Clear retry count on success
             retryCount.current.delete(event.pubkey);
           } catch (error) {
-            console.error(`[Nostr] Failed to parse metadata for ${event.pubkey}:`, error);
             const currentRetries = retryCount.current.get(event.pubkey) || 0;
             if (currentRetries < MAX_RETRIES) {
               metadataUpdateQueue.current.add(event.pubkey);
@@ -148,7 +141,6 @@ export function useNostr() {
         error: (error) => {
           if (!activeSubscriptions.current.has(subscriptionId)) return;
 
-          console.error("[Nostr] Error receiving metadata:", error);
           unprocessedPubkeys.forEach(pubkey => {
             const currentRetries = retryCount.current.get(pubkey) || 0;
             if (currentRetries < MAX_RETRIES) {
@@ -163,9 +155,6 @@ export function useNostr() {
           activeSubscriptions.current.delete(subscriptionId);
         }
       });
-
-    console.log("[Nostr] Metadata request filter emitted:", filter);
-    rxReq.emit(filter);
 
     // If there are more items in the queue, schedule next batch
     if (metadataUpdateQueue.current.size > 0) {
@@ -192,7 +181,6 @@ export function useNostr() {
       if (memCached.error) {
         const currentRetries = retryCount.current.get(pubkey) || 0;
         if (currentRetries < MAX_RETRIES) {
-          console.log(`[Nostr] Retrying failed metadata for ${pubkey}`);
           metadataUpdateQueue.current.add(pubkey);
           return;
         }
@@ -218,7 +206,6 @@ export function useNostr() {
       return;
     }
 
-    console.log(`[Nostr] Queueing metadata update for ${pubkey}`);
     metadataUpdateQueue.current.add(pubkey);
     pendingMetadataRequests.current.add(pubkey);
 
@@ -246,7 +233,6 @@ export function useNostr() {
 
         // Check if cache is still valid
         if (Date.now() - parsedTimestamp < CACHE_TTL) {
-          console.log("[Nostr] Loading cached metadata...");
           const entries = Object.entries(parsedCache);
           // Update both memory cache and state
           entries.forEach(([key, value]) => {
@@ -256,14 +242,9 @@ export function useNostr() {
             });
           });
           setUserMetadata(new Map(entries));
-          console.log("[Nostr] Cached metadata loaded successfully");
-        } else {
-          console.log("[Nostr] Cached metadata is stale, will fetch fresh data");
         }
       }
-    } catch (error) {
-      console.error("[Nostr] Failed to load cached metadata:", error);
-    }
+    } catch (error) {}
   }, []);
 
   // Save metadata to cache periodically
@@ -274,159 +255,110 @@ export function useNostr() {
           const metadataObject = Object.fromEntries(userMetadata);
           localStorage.setItem(METADATA_CACHE_KEY, JSON.stringify(metadataObject));
           localStorage.setItem(METADATA_TIMESTAMP_KEY, Date.now().toString());
-          console.log("[Nostr] Metadata cache updated");
         }
-      } catch (error) {
-        console.error("[Nostr] Failed to cache metadata:", error);
-      }
+      } catch (error) {}
     }, 60000); // Every minute
 
     return () => clearInterval(saveInterval);
   }, [userMetadata]);
 
-  // Initialize rx-nostr and set default relays with delay
+  // Initialize rx-nostr immediately
   useEffect(() => {
     if (initialized || rxRef.current) {
-      console.log("[Nostr] Already initialized, skipping");
       return;
     }
 
-    const initializeNostr = () => {
-      const startTime = Date.now();
-      console.log("[Nostr] Initializing rx-nostr...");
+    try {
+      rxRef.current = createRxNostr({ verifier });
+      rxRef.current.setDefaultRelays(DEFAULT_RELAYS);
+      setInitialized(true);
 
-      try {
-        rxRef.current = createRxNostr({
-          verifier
-        });
-
-        console.log("[Nostr] Setting default relays:", DEFAULT_RELAYS);
-        rxRef.current.setDefaultRelays(DEFAULT_RELAYS);
-        setInitialized(true);
-
-        // Delay subscription setup
-        setTimeout(() => {
-          // Subscribe to new posts from relays
-          const fetchFromRelays = async () => {
-            try {
-              console.log("[Nostr] Starting to fetch events from relays...");
-              const filter = {
-                kinds: [1],
-                limit: 30, // 初回は30件に制限
-                since: Math.floor(Date.now() / 1000) - 24 * 60 * 60 // Last 24 hours
-              };
-
-              const rxReq = createRxForwardReq();
-              console.log("[Nostr] Created forward request with filter:", filter);
-
-              let eventCount = 0;
-              const fetchStartTime = Date.now();
-              const subscriptionId = Math.random().toString(36).substring(7);
-              activeSubscriptions.current.add(subscriptionId);
-
-              // Subscribe to events
-              const subscription = rxRef.current!
-                .use(rxReq)
-                .subscribe({
-                  next: ({ event }) => {
-                    if (!activeSubscriptions.current.has(subscriptionId)) return;
-
-                    eventCount++;
-                    console.log(`[Nostr] Received event #${eventCount}:`, {
-                      id: event.id,
-                      pubkey: event.pubkey,
-                      time: Math.floor((Date.now() - fetchStartTime) / 1000) + 's'
-                    });
-
-                    // Add new event to posts Map if it doesn't exist
-                    setPosts(currentPosts => {
-                      if (currentPosts.has(event.id)) {
-                        console.log(`[Nostr] Event ${event.id} already exists, skipping`);
-                        return currentPosts;
-                      }
-
-                      // Create a temporary post object
-                      const newPost: Post = {
-                        id: 0,
-                        userId: 0,
-                        content: event.content,
-                        createdAt: new Date(event.created_at * 1000).toISOString(),
-                        nostrEventId: event.id,
-                        pubkey: event.pubkey,
-                        signature: event.sig,
-                        metadata: {
-                          tags: event.tags || [],
-                          relays: DEFAULT_RELAYS
-                        }
-                      };
-
-                      // Update Map with new post
-                      const updatedPosts = new Map(currentPosts);
-                      updatedPosts.set(event.id, newPost);
-                      console.log(`[Nostr] Added new post ${event.id}, total posts: ${updatedPosts.size}`);
-                      return updatedPosts;
-                    });
-
-                    // キューにメタデータ更新を追加（遅延実行）
-                    if (!pendingMetadataRequests.current.has(event.pubkey)) {
-                      setTimeout(() => {
-                        queueMetadataUpdate(event.pubkey);
-                      }, 100);
-                    }
-                  },
-                  error: (error) => {
-                    if (!activeSubscriptions.current.has(subscriptionId)) return;
-                    console.error("[Nostr] Error receiving events:", error);
-                    toast({
-                      title: "イベント取得エラー",
-                      description: "リレーからのイベント取得中にエラーが発生しました",
-                      variant: "destructive",
-                    });
-                  },
-                  complete: () => {
-                    activeSubscriptions.current.delete(subscriptionId);
-                  }
-                });
-
-              // Emit filter to start subscription
-              console.log("[Nostr] Emitting filter to start subscription");
-              rxReq.emit(filter);
-              console.log(`[Nostr] Setup completed in ${Date.now() - startTime}ms`);
-              setIsSubscriptionReady(true);
-
-              return () => {
-                subscription.unsubscribe();
-                activeSubscriptions.current.delete(subscriptionId);
-              };
-            } catch (error) {
-              console.error("[Nostr] Failed to fetch events from relays:", error);
-              toast({
-                title: "初期化エラー",
-                description: "リレーからのイベント取得の設定に失敗しました",
-                variant: "destructive",
-              });
-            }
+      // Subscribe to new posts from relays
+      const fetchFromRelays = async () => {
+        try {
+          const filter = {
+            kinds: [1],
+            limit: 30,
+            since: Math.floor(Date.now() / 1000) - 24 * 60 * 60
           };
 
-          fetchFromRelays();
-        }, 1000); // 1秒後にサブスクリプションを開始
-      } catch (error) {
-        console.error("[Nostr] Failed to initialize rx-nostr:", error);
-        toast({
-          title: "初期化エラー",
-          description: "rx-nostrの初期化に失敗しました",
-          variant: "destructive",
-        });
-      }
-    };
+          const rxReq = createRxForwardReq();
+          const subscriptionId = Math.random().toString(36).substring(7);
+          activeSubscriptions.current.add(subscriptionId);
 
-    // 2秒後に初期化を開始
-    setTimeout(initializeNostr, 2000);
+          const subscription = rxRef.current!
+            .use(rxReq)
+            .subscribe({
+              next: ({ event }) => {
+                if (!activeSubscriptions.current.has(subscriptionId)) return;
+
+                setPosts(currentPosts => {
+                  if (currentPosts.has(event.id)) return currentPosts;
+
+                  const updatedPosts = new Map(currentPosts);
+                  updatedPosts.set(event.id, {
+                    id: 0,
+                    userId: 0,
+                    content: event.content,
+                    createdAt: new Date(event.created_at * 1000).toISOString(),
+                    nostrEventId: event.id,
+                    pubkey: event.pubkey,
+                    signature: event.sig,
+                    metadata: {
+                      tags: event.tags || [],
+                      relays: DEFAULT_RELAYS
+                    }
+                  });
+                  return updatedPosts;
+                });
+
+                if (!pendingMetadataRequests.current.has(event.pubkey)) {
+                  queueMetadataUpdate(event.pubkey);
+                }
+              },
+              error: (error) => {
+                if (!activeSubscriptions.current.has(subscriptionId)) return;
+                console.error("[Nostr] Error:", error);
+                toast({
+                  title: "エラー",
+                  description: "データの取得中にエラーが発生しました",
+                  variant: "destructive",
+                });
+              },
+              complete: () => {
+                activeSubscriptions.current.delete(subscriptionId);
+              }
+            });
+
+          rxReq.emit(filter);
+          setIsSubscriptionReady(true);
+
+          return () => {
+            subscription.unsubscribe();
+            activeSubscriptions.current.delete(subscriptionId);
+          };
+        } catch (error) {
+          console.error("[Nostr] Error:", error);
+          toast({
+            title: "エラー",
+            description: "初期化に失敗しました",
+            variant: "destructive",
+          });
+        }
+      };
+
+      fetchFromRelays();
+    } catch (error) {
+      console.error("[Nostr] Error:", error);
+      toast({
+        title: "エラー",
+        description: "初期化に失敗しました",
+        variant: "destructive",
+      });
+    }
 
     return () => {
       if (rxRef.current) {
-        console.log("[Nostr] Disposing rx-nostr...");
-        // クリーンアップ処理
         activeSubscriptions.current.clear();
         cleanupMetadataRequests();
         rxRef.current.dispose();
@@ -435,7 +367,8 @@ export function useNostr() {
         setIsSubscriptionReady(false);
       }
     };
-  }, []); // 依存配列を空にして、マウント時のみ実行されるようにする
+  }, [cleanupMetadataRequests]);
+
 
   const createPostMutation = useMutation({
     mutationFn: async (event: { content: string; pubkey: string; privateKey: string }) => {
