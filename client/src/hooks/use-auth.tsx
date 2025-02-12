@@ -1,7 +1,7 @@
 import { createContext, ReactNode, useContext, useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import * as secp from '@noble/secp256k1';
-import { utils } from 'nostr-tools';
+import { getPublicKey } from 'nostr-tools';
 
 // Define types for Nostr window object
 declare global {
@@ -86,9 +86,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const generateNewKeys = async () => {
     try {
       setIsLoading(true);
-      const privateKeyBytes = utils.randomBytes(32);
-      const privateKey = utils.bytesToHex(privateKeyBytes);
-      const publicKey = utils.bytesToHex(secp.schnorr.getPublicKey(privateKeyBytes));
+      // Generate a random 32-byte private key
+      const privateKeyBytes = new Uint8Array(32);
+      window.crypto.getRandomValues(privateKeyBytes);
+      const privateKey = Buffer.from(privateKeyBytes).toString('hex');
+      const publicKey = getPublicKey(privateKey);
 
       const user: NostrUser = {
         type: "generated",
@@ -101,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       toast({
         title: "Keys Generated",
-        description: "New Nostr keys have been generated. Please save your private key securely!",
+        description: "新しいNostrキーが生成されました。秘密鍵を安全に保管してください！",
       });
     } catch (e) {
       const error = e as Error;
