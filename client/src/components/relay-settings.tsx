@@ -9,12 +9,21 @@ import { useToast } from "@/hooks/use-toast";
 import { Relay, relaySchema } from "@shared/schema";
 
 interface RelaySettingsProps {
-  relays: Relay[];
-  onSave: (relays: Relay[]) => Promise<void>;
+  relays?: Relay[];
+  onSave?: (relays: Relay[]) => Promise<void>;
   isSaving?: boolean;
 }
 
-export default function RelaySettings({ relays, onSave, isSaving = false }: RelaySettingsProps) {
+const DEFAULT_RELAYS: Relay[] = [
+  { url: "wss://r.kojira.io", read: true, write: true },
+  { url: "wss://x.kojira.io", read: true, write: true }
+];
+
+export default function RelaySettings({ 
+  relays = DEFAULT_RELAYS,
+  onSave,
+  isSaving = false 
+}: RelaySettingsProps) {
   const [localRelays, setLocalRelays] = useState<Relay[]>(relays);
   const [newRelayUrl, setNewRelayUrl] = useState("");
   const { toast } = useToast();
@@ -64,6 +73,8 @@ export default function RelaySettings({ relays, onSave, isSaving = false }: Rela
   };
 
   const handleSave = async () => {
+    if (!onSave) return;
+
     try {
       await onSave(localRelays);
       toast({
@@ -129,14 +140,16 @@ export default function RelaySettings({ relays, onSave, isSaving = false }: Rela
             ))}
           </div>
 
-          <Button 
-            onClick={handleSave} 
-            disabled={isSaving}
-            className="w-full"
-          >
-            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            変更を保存
-          </Button>
+          {onSave && (
+            <Button 
+              onClick={handleSave} 
+              disabled={isSaving}
+              className="w-full"
+            >
+              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              変更を保存
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
