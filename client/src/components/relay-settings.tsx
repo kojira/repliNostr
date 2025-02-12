@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -92,24 +92,38 @@ export default function RelaySettings({
 
   return (
     <Card>
-      <CardContent className="pt-6">
-        <div className="space-y-4">
-          <div className="flex gap-2">
-            <Input
-              placeholder="wss://relay.example.com"
-              value={newRelayUrl}
-              onChange={(e) => setNewRelayUrl(e.target.value)}
-            />
-            <Button onClick={addRelay}>
-              <Plus className="h-4 w-4 mr-2" />
-              追加
-            </Button>
-          </div>
+      <CardHeader>
+        <CardTitle>リレー設定</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex gap-2">
+          <Input
+            placeholder="wss://relay.example.com"
+            value={newRelayUrl}
+            onChange={(e) => setNewRelayUrl(e.target.value)}
+          />
+          <Button onClick={addRelay}>
+            <Plus className="h-4 w-4 mr-2" />
+            追加
+          </Button>
+        </div>
 
-          <div className="space-y-2">
-            {localRelays.map((relay) => (
+        <div className="space-y-2">
+          {localRelays.length === 0 ? (
+            <div className="text-center text-muted-foreground py-4">
+              設定されているリレーがありません
+            </div>
+          ) : (
+            localRelays.map((relay) => (
               <div key={relay.url} className="flex items-center gap-4 p-2 border rounded">
-                <div className="flex-1 truncate">{relay.url}</div>
+                <div className="flex-1">
+                  <div className="font-medium truncate">{relay.url}</div>
+                  <div className="text-sm text-muted-foreground">
+                    ステータス: {relay.read && relay.write ? "読み書き可能" : 
+                              relay.read ? "読み取り専用" : 
+                              relay.write ? "書き込み専用" : "無効"}
+                  </div>
+                </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
                     <Switch
@@ -134,20 +148,20 @@ export default function RelaySettings({
                   </Button>
                 </div>
               </div>
-            ))}
-          </div>
-
-          {onSave && (
-            <Button 
-              onClick={handleSave} 
-              disabled={isSaving}
-              className="w-full"
-            >
-              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              変更を保存
-            </Button>
+            ))
           )}
         </div>
+
+        {onSave && (
+          <Button 
+            onClick={handleSave} 
+            disabled={isSaving}
+            className="w-full"
+          >
+            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            変更を保存
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
