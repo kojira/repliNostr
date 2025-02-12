@@ -75,9 +75,15 @@ export function useNostr() {
           .use(rxReq)
           .subscribe({
             next: ({ event }) => {
+              console.log("Received new event:", event);
               // Add new event to posts Map if it doesn't exist
               setPosts(currentPosts => {
-                if (currentPosts.has(event.id)) return currentPosts;
+                if (currentPosts.has(event.id)) {
+                  console.log("Event already exists:", event.id);
+                  return currentPosts;
+                }
+
+                console.log("Adding new event:", event.id);
 
                 // Create a temporary post object
                 const newPost: Post = {
@@ -119,6 +125,7 @@ export function useNostr() {
           });
 
         // Emit filter to start subscription
+        console.log("Emitting filter:", filter);
         rxReq.emit(filter);
       } catch (error) {
         console.error("Failed to fetch events from relays:", error);
@@ -276,7 +283,9 @@ export function useNostr() {
   });
 
   return {
-    posts: Array.from(posts.values()),
+    posts: Array.from(posts.values()).sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    ),
     isLoadingPosts: postsQuery.isLoading,
     createPost: createPostMutation.mutate,
     isCreatingPost: createPostMutation.isPending,
