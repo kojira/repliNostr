@@ -2,19 +2,16 @@
 declare const self: ServiceWorkerGlobalScope;
 
 const CACHE_NAME = 'nostr-client-v1';
-const BASE_URL = import.meta.env.VITE_BASE_URL || '/';
-
-// Remove trailing slash if present
-const normalizedBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
+const BASE_URL = '/repliNostr/';  // GitHub Pages base path
 
 // キャッシュ対象となるパターンを定義
 const STATIC_PATTERNS = [
   // HTMLファイル
-  normalizedBaseUrl + '/',
-  `${normalizedBaseUrl}/index.html`,
+  BASE_URL,
+  `${BASE_URL}index.html`,
   // ビルドされたアセット（動的なファイル名に対応）
-  new RegExp(`${normalizedBaseUrl}/assets/.*\\.js`),
-  new RegExp(`${normalizedBaseUrl}/assets/.*\\.css`)
+  new RegExp(`${BASE_URL}assets/.*\\.js`),
+  new RegExp(`${BASE_URL}assets/.*\\.css`)
 ];
 
 self.addEventListener('install', (event) => {
@@ -50,12 +47,11 @@ self.addEventListener('fetch', (event) => {
 
         const responseToCache = response.clone();
         caches.open(CACHE_NAME).then((cache) => {
-          // URLを正規化してキャッシュ
           const url = new URL(event.request.url);
           // GitHub Pagesのベースパスを考慮
-          const pathname = url.pathname.startsWith(normalizedBaseUrl) 
+          const pathname = url.pathname.startsWith(BASE_URL) 
             ? url.pathname 
-            : normalizedBaseUrl + url.pathname;
+            : BASE_URL + url.pathname.replace(/^\//, '');
           const cacheKey = new Request(pathname + url.search, event.request);
           cache.put(cacheKey, responseToCache);
         });

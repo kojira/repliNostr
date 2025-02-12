@@ -4,13 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script>
+        // Define environment variables
+        window.__ENV = {
+            BASE_URL: '/repliNostr/',
+            ASSET_URL: '/repliNostr/'
+        };
+
         // Debug logging with clearer messages
         console.log('[Debug] Environment:', {
             currentUrl: window.location.href,
             origin: window.location.origin,
             pathname: window.location.pathname,
-            baseUrl: import.meta.env.VITE_BASE_URL || '/',
-            assetUrl: import.meta.env.VITE_ASSET_URL || ''
+            baseUrl: window.__ENV.BASE_URL,
+            assetUrl: window.__ENV.ASSET_URL
         });
 
         // Handle GitHub Pages SPA redirect
@@ -27,7 +33,7 @@
                     if (redirect !== location.href) {
                         console.log('[Debug] Redirecting from:', redirect);
                         // Ensure path is relative to /repliNostr/
-                        const baseUrl = import.meta.env.VITE_BASE_URL || '/repliNostr/';
+                        const baseUrl = window.__ENV.BASE_URL;
                         const newPath = redirect.replace(location.origin, '')
                                               .replace('/repliNostr/', '/');
                         console.log('[Debug] New path:', newPath);
