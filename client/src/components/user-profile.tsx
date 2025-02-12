@@ -1,10 +1,13 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { User } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
 import { useState } from "react";
 import RelaySettings from "./relay-settings";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import ProfileEditor from "./profile-editor";
+import { Edit } from "lucide-react";
 
 interface UserProfileProps {
   user: User;
@@ -13,6 +16,7 @@ interface UserProfileProps {
 export default function UserProfile({ user }: UserProfileProps) {
   const { loginMutation } = useAuth();
   const [isSavingRelays, setIsSavingRelays] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   const handleSaveRelays = async (relays: User['relays']) => {
     setIsSavingRelays(true);
@@ -25,17 +29,35 @@ export default function UserProfile({ user }: UserProfileProps) {
     }
   };
 
+  if (isEditing) {
+    return (
+      <div className="space-y-6">
+        <ProfileEditor onClose={() => setIsEditing(false)} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader className="flex flex-row items-center gap-4">
           <Avatar className="h-16 w-16">
+            <AvatarImage src={user.picture} />
             <AvatarFallback>
               {user.username.slice(0, 2).toUpperCase()}
             </AvatarFallback>
           </Avatar>
-          <div>
-            <h2 className="text-xl font-bold">@{user.username}</h2>
+          <div className="flex-1">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold">@{user.username}</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsEditing(true)}
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            </div>
             <p className="text-sm text-muted-foreground truncate">
               {user.publicKey}
             </p>

@@ -146,10 +146,76 @@ export function useNostr() {
     },
   });
 
+  // Add profile update mutation
+  const updateProfileMutation = useMutation({
+    mutationFn: async (profile: { name?: string; about?: string; picture?: string }) => {
+      // Get the current user
+      const userRes = await apiRequest("GET", "/api/user");
+      const user: User = await userRes.json();
+
+      try {
+        // Create metadata content
+        const content = JSON.stringify(profile);
+
+        // Create the unsigned event for kind 0 (metadata)
+        const unsignedEvent = {
+          kind: 0,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [],
+          content,
+          pubkey: getPublicKey(user.privateKey)
+        };
+
+        console.log("Created unsigned metadata event:", JSON.stringify(unsignedEvent, null, 2));
+
+        // Sign the event
+        const signedEvent = finalizeEvent(unsignedEvent, user.privateKey);
+        console.log("Metadata event signed successfully");
+
+        // Create a new pool for relays
+        const pool = new SimplePool();
+
+        // Get write-enabled relays
+        const relayUrls = user.relays
+          .filter(relay => relay.write)
+          .map(relay => relay.url);
+
+        // Connect and publish to relays
+        const publishPromises = relayUrls.map(async (url) => {
+          const relay = await pool.ensureRelay(url);
+          return pool.publish([url], signedEvent);
+        });
+
+        await Promise.any(publishPromises);
+        console.log("Profile metadata published successfully");
+
+        return profile;
+      } catch (error) {
+        console.error("Failed to update profile:", error);
+        throw new Error(error instanceof Error ? error.message : "Failed to update profile");
+      }
+    },
+    onSuccess: () => {
+      toast({
+        title: "プロフィールを更新しました",
+        description: "プロフィール情報がNostrリレーに保存されました",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "プロフィールの更新に失敗しました",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   return {
     posts: postsQuery.data || [],
     isLoadingPosts: postsQuery.isLoading,
     createPost: createPostMutation.mutate,
     isCreatingPost: createPostMutation.isPending,
+    updateProfile: updateProfileMutation.mutate,
+    isUpdatingProfile: updateProfileMutation.isPending,
   };
 }

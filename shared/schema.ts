@@ -13,7 +13,11 @@ export const users = pgTable("users", {
     url: string;
     read: boolean;
     write: boolean;
-  }[]>().default([]).notNull()
+  }[]>().default([]).notNull(),
+  // Add profile fields
+  name: text("name"),
+  about: text("about"),
+  picture: text("picture")
 });
 
 export const posts = pgTable("posts", {
@@ -34,13 +38,19 @@ export const insertUserSchema = createInsertSchema(users, {
     url: z.string().url("Invalid relay URL"),
     read: z.boolean(),
     write: z.boolean()
-  })).default([])
+  })).default([]),
+  name: z.string().optional(),
+  about: z.string().optional(),
+  picture: z.string().url("Invalid profile picture URL").optional()
 }).pick({
   username: true,
   password: true,
   publicKey: true,
   privateKey: true,
-  relays: true
+  relays: true,
+  name: true,
+  about: true,
+  picture: true
 });
 
 export const insertPostSchema = createInsertSchema(posts).pick({
