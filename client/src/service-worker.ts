@@ -7,24 +7,32 @@ const BASE_URL = import.meta.env.VITE_BASE_URL || '/';
 // Remove trailing slash if present
 const normalizedBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
 
-// Prepend base URL to paths
-const STATIC_ASSETS = [
+// キャッシュ対象となるパターンを定義
+const STATIC_PATTERNS = [
+  // HTMLファイル
   normalizedBaseUrl + '/',
   `${normalizedBaseUrl}/index.html`,
-  `${normalizedBaseUrl}/assets/index.js`,
-  `${normalizedBaseUrl}/assets/index.css`
+  // ビルドされたアセット（動的なファイル名に対応）
+  new RegExp(`${normalizedBaseUrl}/assets/index-.*\\.js`),
+  new RegExp(`${normalizedBaseUrl}/assets/index-.*\\.css`)
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // 正規表現パターンに一致するURLを探してキャッシュ
+      const urls = await Promise.all(
+        STATIC_PATTERNS
+          .filter(pattern => typeof pattern === 'string')
+          .map(url => cache.add(url as string))
+      );
+      return urls;
     })
   );
 });
 
 self.addEventListener('fetch', (event) => {
-  // Skip caching for API requests
+  // APIリクエストはキャッシュしない
   if (event.request.url.includes('/api/')) {
     return;
   }
@@ -42,9 +50,9 @@ self.addEventListener('fetch', (event) => {
 
         const responseToCache = response.clone();
         caches.open(CACHE_NAME).then((cache) => {
-          // Normalize the URL before caching
+          // URLを正規化してキャッシュ
           const url = new URL(event.request.url);
-          const cacheKey = new Request(url.pathname, event.request);
+          const cacheKey = new Request(url.pathname + url.search, event.request);
           cache.put(cacheKey, responseToCache);
         });
 

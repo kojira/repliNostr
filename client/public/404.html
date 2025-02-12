@@ -4,22 +4,32 @@
     <meta charset="UTF-8">
     <title>Page Not Found</title>
     <script>
-        // Debug logging
+        // デバッグログ
         console.log('404 - Current URL:', window.location.href);
         console.log('404 - Origin:', window.location.origin);
         console.log('404 - Pathname:', window.location.pathname);
 
-        // Only redirect for GitHub Pages
+        // GitHub Pages環境のみで実行
         if (location.hostname.includes('github.io')) {
             console.log('404 - GitHub Pages environment detected');
             const url = window.location.href;
-            // 既にsessionStorageにリダイレクト情報がある場合は無限ループを防ぐ
-            if (!sessionStorage.redirect) {
-                sessionStorage.redirect = url;
-                window.location.replace(window.location.origin + '/repliNostr/');
+
+            // アセットファイルへのアクセスの場合
+            if (url.includes('/assets/')) {
+                console.log('404 - Asset request detected');
+                // /repliNostr/assets/へのパスを修正
+                const newPath = url.replace(/\/assets\//, '/repliNostr/assets/');
+                window.location.replace(newPath);
             } else {
-                console.log('404 - Redirect loop detected, clearing sessionStorage');
-                sessionStorage.removeItem('redirect');
+                // 通常のページアクセスの場合
+                // 既にsessionStorageにリダイレクト情報がある場合は無限ループを防ぐ
+                if (!sessionStorage.redirect) {
+                    sessionStorage.redirect = url;
+                    window.location.replace(window.location.origin + '/repliNostr/');
+                } else {
+                    console.log('404 - Redirect loop detected, clearing sessionStorage');
+                    sessionStorage.removeItem('redirect');
+                }
             }
         } else {
             console.log('404 - Development environment detected');
