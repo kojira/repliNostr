@@ -65,12 +65,25 @@ export function useNostr() {
       console.log("Connecting to relays:", relayUrls);
 
       try {
-        // Publish to all configured relays
-        const pubs = await pool.publish(relayUrls, signedEvent);
-        console.log("Publish results:", pubs);
+        // Connect to relays first
+        const relayConnections = relayUrls.map(url => pool.ensureRelay(url));
+        await Promise.all(relayConnections);
+        console.log("Connected to relays successfully");
 
-        // Wait for at least one successful publish
-        const results = await Promise.any(pubs);
+        // Publish to all configured relays
+        const pubs = pool.publish(relayUrls, signedEvent);
+        console.log("Publishing to relays...");
+
+        // Wait for at least one successful publish with timeout
+        const timeout = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Publish timeout")), 5000)
+        );
+
+        const results = await Promise.race([
+          Promise.any(pubs),
+          timeout
+        ]);
+
         console.log("Publish success:", results);
       } catch (error) {
         console.error("Failed to publish to relays:", error);
