@@ -45,16 +45,15 @@ export function useNostr() {
 
       try {
         // Create filter object (not array)
-        const filter = [
-          {
-            kinds: [1],
-            limit: 100
-          }
-        ];
+        const filter = {
+          kinds: [1],
+          limit: 100,
+          since: Math.floor(Date.now() / 1000) - 24 * 60 * 60 // Last 24 hours
+        };
         console.log("Using filter:", JSON.stringify(filter, null, 2));
 
         // Get events from relays
-        const events = await poolRef.current.querySync(readRelays, filter);
+        const events = await poolRef.current.querySync(readRelays, [filter]);
         console.log("Received events:", events);
 
         // Cache events in the database
