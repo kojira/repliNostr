@@ -1,7 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 
 interface PostFormProps {
@@ -12,13 +12,23 @@ interface PostFormProps {
 export default function PostForm({ onSubmit, isSubmitting }: PostFormProps) {
   const [content, setContent] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     if (content.trim()) {
       onSubmit(content);
       setContent("");
     }
-  };
+  }, [content, onSubmit]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      if (content.trim()) {
+        onSubmit(content);
+        setContent("");
+      }
+    }
+  }, [content, onSubmit]);
 
   return (
     <Card>
@@ -28,6 +38,7 @@ export default function PostForm({ onSubmit, isSubmitting }: PostFormProps) {
             placeholder="What's on your mind?"
             value={content}
             onChange={(e) => setContent(e.target.value)}
+            onKeyDown={handleKeyDown}
             className="min-h-[100px]"
           />
           <div className="flex justify-end">
