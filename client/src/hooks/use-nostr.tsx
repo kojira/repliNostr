@@ -27,44 +27,7 @@ export function useNostr() {
       console.log("Creating Nostr event for user:", user.username);
       console.log("User's relays:", JSON.stringify(user.relays, null, 2));
 
-      // Create a new pool for relays
-      const pool = new SimplePool();
-
-      // Filter and get write-enabled relay URLs
-      const relayUrls = user.relays
-        .filter(relay => relay.write)
-        .map(relay => relay.url);
-
-      console.log("Attempting to connect to relays:", relayUrls);
-
       try {
-        // Connect to relays first
-        const relayConnections = await Promise.allSettled(
-          relayUrls.map(async (url) => {
-            console.log(`Connecting to relay: ${url}`);
-            try {
-              const relay = await pool.ensureRelay(url);
-              console.log(`Successfully connected to relay: ${url}`);
-              return relay;
-            } catch (error) {
-              console.error(`Failed to connect to relay ${url}:`, error);
-              throw error;
-            }
-          })
-        );
-
-        // Check connection results
-        const connectedRelays = relayConnections
-          .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
-          .map(result => result.value);
-
-        console.log(`Successfully connected to ${connectedRelays.length} relays:`, 
-          connectedRelays.map(relay => relay.url));
-
-        if (connectedRelays.length === 0) {
-          throw new Error("Failed to connect to any relays");
-        }
-
         // Convert private key and get public key
         const privateKeyBytes = hexToBytes(user.privateKey);
         const pubkeyHex = getPublicKey(user.privateKey);
@@ -87,8 +50,7 @@ export function useNostr() {
 
         try {
           // Sign the event using schnorr signature
-          const messageBytes = hexToBytes(id);
-          const signature = await secp.signSync(messageBytes, privateKeyBytes);
+          const signature = await secp.schnorr.sign(hexToBytes(id), privateKeyBytes);
           const signatureHex = bytesToHex(signature);
 
           // Create the complete signed event
@@ -99,6 +61,43 @@ export function useNostr() {
           };
 
           console.log("Complete signed event:", JSON.stringify(signedEvent, null, 2));
+
+          // Create a new pool for relays
+          const pool = new SimplePool();
+
+          // Filter and get write-enabled relay URLs
+          const relayUrls = user.relays
+            .filter(relay => relay.write)
+            .map(relay => relay.url);
+
+          console.log("Attempting to connect to relays:", relayUrls);
+
+          // Connect to relays first
+          const relayConnections = await Promise.allSettled(
+            relayUrls.map(async (url) => {
+              console.log(`Connecting to relay: ${url}`);
+              try {
+                const relay = await pool.ensureRelay(url);
+                console.log(`Successfully connected to relay: ${url}`);
+                return relay;
+              } catch (error) {
+                console.error(`Failed to connect to relay ${url}:`, error);
+                throw error;
+              }
+            })
+          );
+
+          // Check connection results
+          const connectedRelays = relayConnections
+            .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
+            .map(result => result.value);
+
+          console.log(`Successfully connected to ${connectedRelays.length} relays:`, 
+            connectedRelays.map(relay => relay.url));
+
+          if (connectedRelays.length === 0) {
+            throw new Error("Failed to connect to any relays");
+          }
 
           // Publish to connected relays
           const activeRelayUrls = connectedRelays.map(relay => relay.url);
@@ -142,7 +141,9 @@ export function useNostr() {
         console.error("Failed to publish to Nostr relays:", error);
         throw new Error(error instanceof Error ? error.message : "Failed to publish to Nostr relays");
       } finally {
-        pool.close(relayUrls);
+        if (typeof pool !== 'undefined') {
+          pool.close(relayUrls);
+        }
       }
     },
     onSuccess: () => {
