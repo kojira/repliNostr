@@ -47,7 +47,6 @@ const DEBUG = true;
 export function useNostr() {
   const { toast } = useToast();
   const [initialized, setInitialized] = useState(false);
-  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
   const [posts, setPosts] = useState<Map<string, Post>>(new Map());
   const [userMetadata, setUserMetadata] = useState<Map<string, UserMetadata>>(new Map());
   const initialLoadRef = useRef(false);
@@ -194,8 +193,8 @@ export function useNostr() {
 
   // メタデータ取得の最適化されたインターフェース
   const loadPostMetadata = useCallback((pubkey: string) => {
-    if (!globalRxInstance || !isSubscriptionReady || !initialLoadRef.current) {
-      debugLog(`Metadata load skipped: rxInstance=${!!globalRxInstance}, ready=${isSubscriptionReady}, initialLoad=${initialLoadRef.current}`);
+    if (!globalRxInstance || !isSubscriptionReady) {
+      debugLog(`Metadata load skipped: rxInstance=${!!globalRxInstance}, ready=${isSubscriptionReady}`);
       return;
     }
 
@@ -242,12 +241,7 @@ export function useNostr() {
       return updatedPosts;
     });
 
-    if (initialLoadRef.current) {
-      debugLog(`Initial load complete, requesting metadata for ${event.pubkey}`);
-      loadPostMetadata(event.pubkey);
-    } else {
-      debugLog(`Initial load not complete, skipping metadata for ${event.pubkey}`);
-    }
+    loadPostMetadata(event.pubkey);
   }, [loadPostMetadata]);
 
   // rx-nostrの初期化
@@ -324,7 +318,7 @@ export function useNostr() {
               complete: () => {
                 debugLog(`Initial fetch completed, processed ${eventsProcessed} events`);
                 initialLoadRef.current = true;
-                setIsInitialLoadComplete(true);
+                
               }
             });
 
@@ -372,25 +366,6 @@ export function useNostr() {
     initializeNostr();
   }, [debugLog, toast, updatePostsAndCache]);
 
-  // 初期ロード完了後のメタデータ取得
-  useEffect(() => {
-    if (isInitialLoadComplete && posts.size > 0) {
-      debugLog(`Initial load complete with ${posts.size} posts, starting metadata fetch`);
-      const uniquePubkeys = new Set<string>();
-      posts.forEach(post => uniquePubkeys.add(post.pubkey));
-      debugLog(`Found ${uniquePubkeys.size} unique pubkeys`);
-
-      uniquePubkeys.forEach(pubkey => {
-        debugLog(`Queueing metadata request for pubkey: ${pubkey}`);
-        metadataUpdateQueue.current.add(pubkey);
-      });
-
-      if (!isProcessingBatch) {
-        debugLog('Starting initial metadata batch processing');
-        processBatchMetadataUpdate();
-      }
-    }
-  }, [isInitialLoadComplete, posts, processBatchMetadataUpdate, debugLog]);
 
   const pruneMetadataCache = useCallback(() => {
     if (metadataMemoryCache.size > MAX_CACHED_METADATA) {
@@ -453,6 +428,7 @@ export function useNostr() {
       debugLog('Error loading events cache:', error);
     }
   }, [debugLog]);
+
 
 
   return {
