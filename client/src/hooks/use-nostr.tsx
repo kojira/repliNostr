@@ -13,7 +13,7 @@ export function useNostr() {
 
   // Initialize rx-nostr on mount
   useEffect(() => {
-    rxRef.current = createRxNostr();
+    rxRef.current = createRxNostr([]);
     return () => {
       if (rxRef.current) {
         rxRef.current.dispose();
@@ -35,7 +35,7 @@ export function useNostr() {
       // Get read-enabled relay URLs
       const readRelays = user.relays
         .filter(relay => relay.read)
-        .map(relay => relay.url);
+        .map(relay => ({ url: relay.url }));
 
       if (readRelays.length === 0) {
         throw new Error("No read-enabled relays configured");
@@ -44,8 +44,8 @@ export function useNostr() {
       console.log("Fetching events from relays:", readRelays);
 
       try {
-        // Set relays for this query
-        rxRef.current.setRelays(readRelays);
+        // Create a new RxNostr instance with the current relays
+        rxRef.current = createRxNostr(readRelays);
 
         // Create filter
         const filter = {
@@ -88,7 +88,7 @@ export function useNostr() {
               content: event.content,
               sig: event.sig,
               tags: event.tags,
-              relays: readRelays
+              relays: readRelays.map(r => r.url)
             });
             return await res.json();
           } catch (error) {
@@ -121,17 +121,14 @@ export function useNostr() {
         // Get write-enabled relay URLs
         const writeRelays = user.relays
           .filter(relay => relay.write)
-          .map(relay => relay.url);
+          .map(relay => ({ url: relay.url }));
 
         if (writeRelays.length === 0) {
           throw new Error("No write-enabled relays configured");
         }
 
-        // Set relays for this publish
-        if (!rxRef.current) {
-          throw new Error("rx-nostr not initialized");
-        }
-        rxRef.current.setRelays(writeRelays);
+        // Create a new RxNostr instance with the current relays
+        rxRef.current = createRxNostr(writeRelays);
 
         // Create event
         const event = {
@@ -163,7 +160,7 @@ export function useNostr() {
           content: signedEvent.content,
           sig: signedEvent.sig,
           tags: signedEvent.tags,
-          relays: writeRelays
+          relays: writeRelays.map(r => r.url)
         });
 
         return await cacheRes.json();
@@ -202,16 +199,14 @@ export function useNostr() {
         // Get write-enabled relays
         const writeRelays = user.relays
           .filter(relay => relay.write)
-          .map(relay => relay.url);
+          .map(relay => ({ url: relay.url }));
 
         if (writeRelays.length === 0) {
           throw new Error("No write-enabled relays configured");
         }
 
-        if (!rxRef.current) {
-          throw new Error("rx-nostr not initialized");
-        }
-        rxRef.current.setRelays(writeRelays);
+        // Create a new RxNostr instance with the current relays
+        rxRef.current = createRxNostr(writeRelays);
 
         // Create event
         const event = {
