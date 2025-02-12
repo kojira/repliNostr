@@ -13,17 +13,6 @@ const CACHE_TTL = 1000 * 60 * 60 * 3; // 3時間
 const MAX_CACHED_METADATA = 1000;
 const METADATA_TIMEOUT = 15000; // 15秒でタイムアウト
 
-// メモリ内キャッシュ（ローカルストレージのミラー）
-const metadataMemoryCache = new Map<
-  string,
-  { data: UserMetadata; timestamp: number; error?: string }
->();
-let isProcessingMetadata = false;
-
-// rx-nostrインスタンス管理
-let globalRxInstance: RxNostr | null = null;
-let globalInitialized = false;
-
 interface UserMetadata {
   name?: string;
   picture?: string;
@@ -31,8 +20,12 @@ interface UserMetadata {
 }
 
 const DEFAULT_RELAYS = ["wss://r.kojira.io", "wss://x.kojira.io"];
-
 const DEBUG = true;
+
+// rx-nostrインスタンス管理
+let globalRxInstance: RxNostr | null = null;
+let globalInitialized = false;
+let isProcessingMetadata = false;
 
 // ローカルストレージ操作ユーティリティ
 const storage = {
@@ -114,17 +107,15 @@ export function useNostr() {
 
   // キャッシュの有効性をチェックする関数
   const isValidCache = useCallback((pubkey: string): boolean => {
-    const cached = metadataMemoryCache.get(pubkey);
-    return (
-      cached &&
-      Date.now() - cached.timestamp < CACHE_TTL &&
-      !cached.error
-    );
+    const cached = storage.loadMetadata(pubkey);
+    return cached && 
+           Date.now() - cached.timestamp < CACHE_TTL && 
+           !cached.error;
   }, []);
 
   // キャッシュからメタデータを適用する関数
   const applyMetadataFromCache = useCallback((pubkey: string) => {
-    const cached = metadataMemoryCache.get(pubkey);
+    const cached = storage.loadMetadata(pubkey);
     if (cached && !cached.error) {
       setUserMetadata((current) => {
         const updated = new Map(current);
@@ -182,8 +173,12 @@ export function useNostr() {
                   timestamp: Date.now(),
                   error: "Metadata fetch timeout",
                 };
-                metadataMemoryCache.set(pubkey, defaultMetadata);
                 storage.saveMetadata(pubkey, defaultMetadata);
+                setUserMetadata((current) => {
+                  const updated = new Map(current);
+                  updated.set(pubkey, defaultMetadata.data);
+                  return updated;
+                });
                 isCompleted = true;
                 resolve(undefined);
               }
@@ -206,7 +201,6 @@ export function useNostr() {
                     data: processedMetadata,
                     timestamp: Date.now(),
                   };
-                  metadataMemoryCache.set(event.pubkey, cacheEntry);
                   storage.saveMetadata(event.pubkey, cacheEntry);
 
                   setUserMetadata((current) => {
@@ -278,7 +272,6 @@ export function useNostr() {
   // イベントとキャッシュの更新
   const updatePostsAndCache = useCallback(
     (event: any, post: Post) => {
-      // メモリキャッシュを更新
       setPosts((currentPosts) => {
         const updatedPosts = new Map(currentPosts);
         updatedPosts.set(event.id, post);
@@ -300,15 +293,13 @@ export function useNostr() {
     [debugLog, isValidCache, applyMetadataFromCache, processMetadataQueue],
   );
 
-  // 初期化時にキャッシュを読み込む
+  // 初期化時にローカルストレージからキャッシュを読み込む
   useEffect(() => {
     // 期限切れのキャッシュをクリア
     const validCache = storage.clearExpiredMetadata();
 
-    // メモリキャッシュを初期化
-    metadataMemoryCache.clear();
+    // メタデータを初期化
     Object.entries(validCache).forEach(([pubkey, value]) => {
-      metadataMemoryCache.set(pubkey, value);
       if (!value.error) {
         setUserMetadata((current) => {
           const updated = new Map(current);
@@ -340,9 +331,8 @@ export function useNostr() {
         }
         setInitialized(true);
 
+        debugLog("Setting up subscriptions");
         const setupSubscriptions = () => {
-          debugLog("Setting up subscriptions");
-
           const initialFilter = {
             kinds: [1],
             limit: 30,
@@ -384,9 +374,7 @@ export function useNostr() {
                 });
               },
               complete: () => {
-                debugLog(
-                  `Initial fetch completed with ${initialEventsReceived} events`,
-                );
+                debugLog(`Initial fetch completed with ${initialEventsReceived} events`);
                 setIsSubscriptionReady(true);
                 subscriptionReadyRef.current = true;
                 isInitialLoadComplete.current = true;
@@ -449,10 +437,6 @@ export function useNostr() {
 
     initializeNostr();
   }, [debugLog, toast, updatePostsAndCache]);
-
-  // キャッシュ管理 (removed pruneMetadataCache as it's handled by storage)
-
-  // キャッシュからの初期読み込み (removed as metadata loading is handled in useEffect above)
 
   return {
     posts: Array.from(posts.values()).sort(
