@@ -58,9 +58,11 @@ export function useNostr() {
 
   // キャッシュからメタデータを取得または更新キューに追加
   const loadOrQueueMetadata = useCallback((pubkey: string) => {
+    debugLog(`Checking metadata for ${pubkey}`);
     const memCached = metadataMemoryCache.get(pubkey);
     if (memCached && (Date.now() - memCached.timestamp < CACHE_TTL)) {
       if (!memCached.error) {
+        debugLog(`Using cached metadata for ${pubkey}`);
         setUserMetadata(current => {
           if (!current.has(pubkey)) {
             const updated = new Map(current);
@@ -74,11 +76,33 @@ export function useNostr() {
     }
 
     if (!pendingMetadataRequests.current.has(pubkey) && !metadataUpdateQueue.current.has(pubkey)) {
+      debugLog(`Queueing metadata request for ${pubkey}`);
       metadataUpdateQueue.current.add(pubkey);
+      if (isSubscriptionReady) {
+        processBatchMetadataUpdate();
+      }
       return false;
     }
     return false;
-  }, []);
+  }, [isSubscriptionReady]);
+
+  // イベントキャッシュを保存
+  useEffect(() => {
+    const saveInterval = setInterval(() => {
+      try {
+        if (posts.size > 0) {
+          const eventsObject = Object.fromEntries(posts);
+          localStorage.setItem(EVENTS_CACHE_KEY, JSON.stringify(eventsObject));
+          localStorage.setItem(EVENTS_TIMESTAMP_KEY, Date.now().toString());
+          debugLog(`Saved ${posts.size} events to cache`);
+        }
+      } catch (error) {
+        debugLog('Error saving events cache:', error);
+      }
+    }, 60000); // 1分ごと
+
+    return () => clearInterval(saveInterval);
+  }, [posts, debugLog]);
 
   // Load cached events on mount
   useEffect(() => {
@@ -109,30 +133,29 @@ export function useNostr() {
 
           // キャッシュされたイベントのメタデータを処理
           const uniquePubkeys = new Set(entries.map(([_, post]) => (post as Post).pubkey));
-          debugLog(`Processing metadata for ${uniquePubkeys.size} unique pubkeys`);
+          debugLog(`Processing metadata for ${uniquePubkeys.size} unique pubkeys from cache`);
           uniquePubkeys.forEach(pubkey => {
-            if (!loadOrQueueMetadata(pubkey)) {
-              debugLog(`Queued metadata update for ${pubkey}`);
-            }
+            loadOrQueueMetadata(pubkey);
           });
-
-          // メタデータの取得を開始
-          if (metadataUpdateQueue.current.size > 0) {
-            processBatchMetadataUpdate();
-          }
         }
       }
     } catch (error) {
       debugLog('Error loading events cache:', error);
     }
-  }, [loadOrQueueMetadata]);
+  }, [loadOrQueueMetadata, debugLog]);
 
   // Process metadata updates in batches
   const processBatchMetadataUpdate = useCallback(() => {
-    if (!globalRxInstance || metadataUpdateQueue.current.size === 0 || !isSubscriptionReady) return;
+    if (!globalRxInstance || metadataUpdateQueue.current.size === 0 || !isSubscriptionReady) {
+      debugLog('Skipping metadata update: conditions not met');
+      return;
+    }
 
     const pubkey = Array.from(metadataUpdateQueue.current)[0]; // 1件ずつ処理
-    if (pendingMetadataRequests.current.has(pubkey)) return;
+    if (pendingMetadataRequests.current.has(pubkey)) {
+      debugLog(`Skipping metadata request for ${pubkey}: already pending`);
+      return;
+    }
 
     debugLog(`Processing metadata for pubkey: ${pubkey}`);
     metadataUpdateQueue.current.delete(pubkey);
@@ -246,6 +269,7 @@ export function useNostr() {
   useEffect(() => {
     // グローバルインスタンスが既に存在する場合は再利用
     if (globalInitialized) {
+      debugLog("Using existing rx-nostr instance");
       setInitialized(true);
       setIsSubscriptionReady(true);
       return;
@@ -334,6 +358,11 @@ export function useNostr() {
               relays: DEFAULT_RELAYS
             }
           };
+
+          eventsMemoryCache.set(event.id, {
+            data: post,
+            timestamp: Date.now()
+          });
 
           setPosts(currentPosts => {
             const updatedPosts = new Map(currentPosts);
