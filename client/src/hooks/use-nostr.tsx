@@ -27,56 +27,79 @@ export function useNostr() {
       console.log("Creating Nostr event for user:", user.username);
       console.log("User's relays:", JSON.stringify(user.relays, null, 2));
 
-      // Create the Nostr event
-      const event = {
-        kind: 1,
-        created_at: Math.floor(Date.now() / 1000),
-        tags: [],
-        content: content,
-        pubkey: getPublicKey(user.privateKey)
-      };
-
-      // Calculate the event hash (id)
-      const id = getEventHash(event);
-      console.log("Event hash generated:", id);
-
-      // Convert the event hash to bytes and sign it
-      const eventHash = hexToBytes(id);
-      const privateKeyBytes = hexToBytes(user.privateKey);
-      const signature = await secp256k1.schnorr.sign(eventHash, privateKeyBytes);
-
-      // Create the complete signed event
-      const signedEvent = {
-        ...event,
-        id,
-        sig: bytesToHex(signature)
-      };
-
-      console.log("Signed event:", signedEvent);
-
-      // Create a new pool for relays
-      const pool = new SimplePool();
+      // Create a new pool for relays with debug options
+      const pool = new SimplePool({
+        getTimeout: 10000,  // 10 seconds timeout
+        eoseTimeout: 5000,  // 5 seconds timeout for end of stored events
+      });
 
       // Filter and get write-enabled relay URLs
       const relayUrls = user.relays
         .filter(relay => relay.write)
         .map(relay => relay.url);
 
-      console.log("Connecting to relays:", relayUrls);
+      console.log("Attempting to connect to relays:", relayUrls);
 
       try {
         // Connect to relays first
-        const relayConnections = relayUrls.map(url => {
-          console.log(`Attempting to connect to relay: ${url}`);
-          return pool.ensureRelay(url);
-        });
+        const relayConnections = await Promise.allSettled(
+          relayUrls.map(async (url) => {
+            console.log(`Connecting to relay: ${url}`);
+            try {
+              const relay = await pool.ensureRelay(url);
+              console.log(`Successfully connected to relay: ${url}`);
+              return relay;
+            } catch (error) {
+              console.error(`Failed to connect to relay ${url}:`, error);
+              throw error;
+            }
+          })
+        );
 
-        const connectedRelays = await Promise.all(relayConnections);
-        console.log("Connected relays:", connectedRelays.map(relay => relay.url));
+        // Check connection results
+        const connectedRelays = relayConnections
+          .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
+          .map(result => result.value);
 
-        // Publish to all configured relays
-        console.log("Publishing event to relays...");
-        const pubs = pool.publish(relayUrls, signedEvent);
+        console.log(`Successfully connected to ${connectedRelays.length} relays:`, 
+          connectedRelays.map(relay => relay.url));
+
+        if (connectedRelays.length === 0) {
+          throw new Error("Failed to connect to any relays");
+        }
+
+        // Create the Nostr event
+        const event = {
+          kind: 1,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [],
+          content: content,
+          pubkey: getPublicKey(user.privateKey)
+        };
+
+        // Calculate the event hash (id)
+        const id = getEventHash(event);
+        console.log("Event hash generated:", id);
+
+        // Sign the event
+        const eventHash = hexToBytes(id);
+        const privateKeyBytes = hexToBytes(user.privateKey);
+        const signature = await secp256k1.schnorr.sign(eventHash, privateKeyBytes);
+
+        // Create the complete signed event
+        const signedEvent = {
+          ...event,
+          id,
+          sig: bytesToHex(signature)
+        };
+
+        console.log("Publishing signed event:", signedEvent);
+
+        // Publish to connected relays
+        const activeRelayUrls = connectedRelays.map(relay => relay.url);
+        console.log("Publishing to relays:", activeRelayUrls);
+
+        const pubs = pool.publish(activeRelayUrls, signedEvent);
 
         // Wait for at least one successful publish with timeout
         const timeout = new Promise((_, reject) => 
@@ -84,19 +107,23 @@ export function useNostr() {
         );
 
         const results = await Promise.race([
-          Promise.any(pubs),
+          Promise.any(pubs).then(result => {
+            console.log("Successfully published to at least one relay:", result);
+            return result;
+          }),
           timeout
         ]);
 
-        console.log("Publish success:", results);
+        console.log("Final publish results:", results);
+
+        // Return the created post
+        return post;
       } catch (error) {
-        console.error("Failed to publish to relays:", error);
-        throw new Error("Failed to publish to Nostr relays");
+        console.error("Failed to publish to Nostr relays:", error);
+        throw new Error(error instanceof Error ? error.message : "Failed to publish to Nostr relays");
       } finally {
         pool.close(relayUrls);
       }
-
-      return post;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/posts"] });
