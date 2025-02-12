@@ -39,49 +39,77 @@ export function useNostr() {
   const retryCount = useRef<Map<string, number>>(new Map());
   const MAX_RETRIES = 3;
   const [isSubscriptionReady, setIsSubscriptionReady] = useState(false);
+  const activeSubscriptions = useRef<Set<string>>(new Set());
+
+  // メタデータのクリーンアップ
+  const cleanupMetadataRequests = useCallback(() => {
+    pendingMetadataRequests.current.clear();
+    metadataUpdateQueue.current.clear();
+    retryCount.current.clear();
+    if (updateTimeoutRef.current) {
+      clearTimeout(updateTimeoutRef.current);
+      updateTimeoutRef.current = null;
+    }
+  }, []);
 
   // Process metadata updates in batches
   const processBatchMetadataUpdate = useCallback(() => {
     if (!rxRef.current || metadataUpdateQueue.current.size === 0 || !isSubscriptionReady) return;
 
     const pubkeys = Array.from(metadataUpdateQueue.current).slice(0, batchSize);
-    pubkeys.forEach(key => metadataUpdateQueue.current.delete(key));
+    // 既に処理中のpubkeyは除外
+    const unprocessedPubkeys = pubkeys.filter(key => !pendingMetadataRequests.current.has(key));
+    if (unprocessedPubkeys.length === 0) return;
 
-    console.log(`[Nostr] Processing metadata batch for pubkeys:`, pubkeys);
+    unprocessedPubkeys.forEach(key => {
+      metadataUpdateQueue.current.delete(key);
+      pendingMetadataRequests.current.add(key);
+    });
+
+    console.log(`[Nostr] Processing metadata batch for pubkeys:`, unprocessedPubkeys);
+
+    const subscriptionId = Math.random().toString(36).substring(7);
+    activeSubscriptions.current.add(subscriptionId);
 
     const filter = {
       kinds: [0],
-      authors: pubkeys,
+      authors: unprocessedPubkeys,
       limit: 1
     };
 
     const rxReq = createRxForwardReq();
     const metadataStartTime = Date.now();
     const timeoutMs = 10000; // 10秒タイムアウト
+
     const timeoutId = setTimeout(() => {
-      console.log(`[Nostr] Metadata request timeout for pubkeys:`, pubkeys);
-      pubkeys.forEach(pubkey => {
-        const currentRetries = retryCount.current.get(pubkey) || 0;
-        if (currentRetries < MAX_RETRIES) {
-          console.log(`[Nostr] Retrying metadata request for ${pubkey} (attempt ${currentRetries + 1}/${MAX_RETRIES})`);
-          retryCount.current.set(pubkey, currentRetries + 1);
-          metadataUpdateQueue.current.add(pubkey);
-        } else {
-          console.log(`[Nostr] Max retries reached for ${pubkey}, storing error state`);
-          metadataMemoryCache.set(pubkey, {
-            data: { name: `nostr:${pubkey.slice(0, 8)}` },
-            timestamp: Date.now(),
-            error: 'Metadata fetch failed'
-          });
-        }
-        pendingMetadataRequests.current.delete(pubkey);
-      });
+      if (activeSubscriptions.current.has(subscriptionId)) {
+        console.log(`[Nostr] Metadata request timeout for pubkeys:`, unprocessedPubkeys);
+        unprocessedPubkeys.forEach(pubkey => {
+          const currentRetries = retryCount.current.get(pubkey) || 0;
+          if (currentRetries < MAX_RETRIES) {
+            console.log(`[Nostr] Retrying metadata request for ${pubkey} (attempt ${currentRetries + 1}/${MAX_RETRIES})`);
+            retryCount.current.set(pubkey, currentRetries + 1);
+            metadataUpdateQueue.current.add(pubkey);
+          } else {
+            console.log(`[Nostr] Max retries reached for ${pubkey}, storing error state`);
+            metadataMemoryCache.set(pubkey, {
+              data: { name: `nostr:${pubkey.slice(0, 8)}` },
+              timestamp: Date.now(),
+              error: 'Metadata fetch failed'
+            });
+          }
+          pendingMetadataRequests.current.delete(pubkey);
+        });
+        activeSubscriptions.current.delete(subscriptionId);
+      }
     }, timeoutMs);
 
-    rxRef.current
+    const subscription = rxRef.current
       .use(rxReq)
       .subscribe({
         next: ({ event }) => {
+          if (!activeSubscriptions.current.has(subscriptionId)) return;
+
           try {
             const metadata = JSON.parse(event.content) as UserMetadata;
             console.log(`[Nostr] Received metadata for ${event.pubkey} in ${Date.now() - metadataStartTime}ms:`, metadata);
@@ -118,8 +146,10 @@ export function useNostr() {
           }
         },
         error: (error) => {
+          if (!activeSubscriptions.current.has(subscriptionId)) return;
+
           console.error("[Nostr] Error receiving metadata:", error);
-          pubkeys.forEach(pubkey => {
+          unprocessedPubkeys.forEach(pubkey => {
             const currentRetries = retryCount.current.get(pubkey) || 0;
             if (currentRetries < MAX_RETRIES) {
               metadataUpdateQueue.current.add(pubkey);
@@ -130,6 +160,7 @@ export function useNostr() {
         },
         complete: () => {
           clearTimeout(timeoutId);
+          activeSubscriptions.current.delete(subscriptionId);
         }
       });
 
@@ -143,6 +174,11 @@ export function useNostr() {
         updateTimeoutRef.current = null;
       }, 100);
     }
+
+    return () => {
+      subscription.unsubscribe();
+      activeSubscriptions.current.delete(subscriptionId);
+    };
   }, [isSubscriptionReady]);
 
   // メタデータの更新をキューに追加
@@ -276,7 +312,7 @@ export function useNostr() {
               console.log("[Nostr] Starting to fetch events from relays...");
               const filter = {
                 kinds: [1],
-                limit: 100,
+                limit: 30, // 初回は30件に制限
                 since: Math.floor(Date.now() / 1000) - 24 * 60 * 60 // Last 24 hours
               };
 
@@ -285,12 +321,16 @@ export function useNostr() {
 
               let eventCount = 0;
               const fetchStartTime = Date.now();
+              const subscriptionId = Math.random().toString(36).substring(7);
+              activeSubscriptions.current.add(subscriptionId);
 
               // Subscribe to events
-              rxRef.current!
+              const subscription = rxRef.current!
                 .use(rxReq)
                 .subscribe({
                   next: ({ event }) => {
+                    if (!activeSubscriptions.current.has(subscriptionId)) return;
+
                     eventCount++;
                     console.log(`[Nostr] Received event #${eventCount}:`, {
                       id: event.id,
@@ -328,17 +368,23 @@ export function useNostr() {
                     });
 
                     // キューにメタデータ更新を追加（遅延実行）
-                    setTimeout(() => {
-                      queueMetadataUpdate(event.pubkey);
-                    }, 100);
+                    if (!pendingMetadataRequests.current.has(event.pubkey)) {
+                      setTimeout(() => {
+                        queueMetadataUpdate(event.pubkey);
+                      }, 100);
+                    }
                   },
                   error: (error) => {
+                    if (!activeSubscriptions.current.has(subscriptionId)) return;
                     console.error("[Nostr] Error receiving events:", error);
                     toast({
                       title: "イベント取得エラー",
                       description: "リレーからのイベント取得中にエラーが発生しました",
                       variant: "destructive",
                     });
+                  },
+                  complete: () => {
+                    activeSubscriptions.current.delete(subscriptionId);
                   }
                 });
 
@@ -347,6 +393,11 @@ export function useNostr() {
               rxReq.emit(filter);
               console.log(`[Nostr] Setup completed in ${Date.now() - startTime}ms`);
               setIsSubscriptionReady(true);
+
+              return () => {
+                subscription.unsubscribe();
+                activeSubscriptions.current.delete(subscriptionId);
+              };
             } catch (error) {
               console.error("[Nostr] Failed to fetch events from relays:", error);
               toast({
@@ -375,6 +426,9 @@ export function useNostr() {
     return () => {
       if (rxRef.current) {
         console.log("[Nostr] Disposing rx-nostr...");
+        // クリーンアップ処理
+        activeSubscriptions.current.clear();
+        cleanupMetadataRequests();
         rxRef.current.dispose();
         rxRef.current = null;
         setInitialized(false);
