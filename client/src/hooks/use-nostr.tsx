@@ -24,6 +24,9 @@ export function useNostr() {
       const userRes = await apiRequest("GET", "/api/user");
       const user: User = await userRes.json();
 
+      console.log("Creating Nostr event for user:", user.username);
+      console.log("User's relays:", user.relays);
+
       // Create the Nostr event
       const event = {
         kind: 1,
@@ -35,6 +38,7 @@ export function useNostr() {
 
       // Calculate the event hash (id)
       const id = getEventHash(event);
+      console.log("Event hash generated:", id);
 
       // Convert the event hash to bytes and sign it
       const eventHash = hexToBytes(id);
@@ -48,18 +52,29 @@ export function useNostr() {
         sig: bytesToHex(signature)
       };
 
+      console.log("Signed event:", signedEvent);
+
       // Create a new pool for relays
       const pool = new SimplePool();
 
-      // Send to all configured relays
+      // Filter and get write-enabled relay URLs
       const relayUrls = user.relays
         .filter(relay => relay.write)
         .map(relay => relay.url);
 
+      console.log("Connecting to relays:", relayUrls);
+
       try {
-        await pool.publish(relayUrls, signedEvent);
+        // Publish to all configured relays
+        const pubs = await pool.publish(relayUrls, signedEvent);
+        console.log("Publish results:", pubs);
+
+        // Wait for at least one successful publish
+        const results = await Promise.any(pubs);
+        console.log("Publish success:", results);
       } catch (error) {
-        console.error('Failed to publish to relays:', error);
+        console.error("Failed to publish to relays:", error);
+        throw new Error("Failed to publish to Nostr relays");
       } finally {
         pool.close(relayUrls);
       }
