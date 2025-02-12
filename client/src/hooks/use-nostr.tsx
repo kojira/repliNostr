@@ -62,6 +62,26 @@ export function useNostr() {
   }, []);
 
 
+  // キャッシュの有効性をチェックする関数
+  const isValidCache = useCallback((pubkey: string): boolean => {
+    const cached = metadataMemoryCache.get(pubkey);
+    return cached && 
+           Date.now() - cached.timestamp < CACHE_TTL && 
+           !cached.error;
+  }, []);
+
+  // キャッシュからメタデータを適用する関数
+  const applyMetadataFromCache = useCallback((pubkey: string) => {
+    const cached = metadataMemoryCache.get(pubkey);
+    if (cached && !cached.error) {
+      setUserMetadata((current) => {
+        const updated = new Map(current);
+        updated.set(pubkey, cached.data);
+        return updated;
+      });
+    }
+  }, []);
+
   // メタデータ取得の最適化されたインターフェース - シリアルに1件ずつ処理
   const loadPostMetadata = useCallback(
     async (pubkey: string) => {
@@ -69,20 +89,6 @@ export function useNostr() {
         debugLog(
           `Metadata load skipped: rxInstance=${!!globalRxInstance}, ready=${subscriptionReadyRef.current}`,
         );
-        return;
-      }
-
-      // キャッシュをチェック
-      const memCached = metadataMemoryCache.get(pubkey);
-      if (memCached && Date.now() - memCached.timestamp < CACHE_TTL) {
-        debugLog(`Using cached metadata for ${pubkey}`);
-        if (!memCached.error) {
-          setUserMetadata((current) => {
-            const updated = new Map(current);
-            updated.set(pubkey, memCached.data);
-            return updated;
-          });
-        }
         return;
       }
 
@@ -200,24 +206,15 @@ export function useNostr() {
         return updatedPosts;
       });
 
-      // キャッシュされたメタデータがあれば即座に適用
-      const cachedMetadata = metadataMemoryCache.get(event.pubkey);
-      if (
-        cachedMetadata &&
-        Date.now() - cachedMetadata.timestamp < CACHE_TTL &&
-        !cachedMetadata.error
-      ) {
-        setUserMetadata((current) => {
-          const updated = new Map(current);
-          updated.set(event.pubkey, cachedMetadata.data);
-          return updated;
-        });
+      // キャッシュされたメタデータがあれば即座に適用し、なければ非同期で取得
+      if (isValidCache(event.pubkey)) {
+        debugLog(`Using cached metadata for ${event.pubkey}`);
+        applyMetadataFromCache(event.pubkey);
       } else {
-        // メタデータが必要な場合は非同期で取得
         loadPostMetadata(event.pubkey);
       }
     },
-    [debugLog, loadPostMetadata],
+    [debugLog, loadPostMetadata, isValidCache, applyMetadataFromCache],
   );
 
   // rx-nostrの初期化
