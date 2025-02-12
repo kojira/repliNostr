@@ -19,11 +19,47 @@ const DEFAULT_RELAYS = [
   // 必要に応じて他のリレーを追加
 ];
 
+// ローカルストレージのキー
+const METADATA_CACHE_KEY = 'nostr_metadata_cache';
+const METADATA_TIMESTAMP_KEY = 'nostr_metadata_timestamp';
+const CACHE_TTL = 1000 * 60 * 60; // 1時間
+
 export function useNostr() {
   const { toast } = useToast();
   const rxRef = useRef<RxNostr | null>(null);
   const [posts, setPosts] = useState<Map<string, Post>>(new Map());
   const [userMetadata, setUserMetadata] = useState<Map<string, UserMetadata>>(new Map());
+
+  // Load cached metadata on mount
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem(METADATA_CACHE_KEY);
+      const timestamp = localStorage.getItem(METADATA_TIMESTAMP_KEY);
+
+      if (cached && timestamp) {
+        const parsedCache = JSON.parse(cached);
+        const parsedTimestamp = parseInt(timestamp, 10);
+
+        // Check if cache is still valid
+        if (Date.now() - parsedTimestamp < CACHE_TTL) {
+          setUserMetadata(new Map(Object.entries(parsedCache)));
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load cached metadata:", error);
+    }
+  }, []);
+
+  // Save metadata to cache whenever it changes
+  useEffect(() => {
+    try {
+      const metadataObject = Object.fromEntries(userMetadata);
+      localStorage.setItem(METADATA_CACHE_KEY, JSON.stringify(metadataObject));
+      localStorage.setItem(METADATA_TIMESTAMP_KEY, Date.now().toString());
+    } catch (error) {
+      console.error("Failed to cache metadata:", error);
+    }
+  }, [userMetadata]);
 
   // Initialize rx-nostr and set default relays
   useEffect(() => {
@@ -44,9 +80,15 @@ export function useNostr() {
 
   // Function to fetch user metadata from relays
   const fetchUserMetadata = async (pubkey: string) => {
-    if (!rxRef.current || userMetadata.has(pubkey)) return;
+    if (!rxRef.current) return;
 
-    // Set initial placeholder while fetching
+    // Return cached metadata if available
+    const cached = userMetadata.get(pubkey);
+    if (cached) {
+      return;
+    }
+
+    // Set initial placeholder
     setUserMetadata(current => {
       const updated = new Map(current);
       if (!updated.has(pubkey)) {
@@ -56,7 +98,6 @@ export function useNostr() {
     });
 
     try {
-      // Create filter for kind 0 (metadata) events
       const filter = {
         kinds: [0],
         authors: [pubkey],
@@ -68,7 +109,6 @@ export function useNostr() {
       // Set timeout for metadata request
       const timeoutId = setTimeout(() => {
         console.log(`Metadata request timeout for pubkey: ${pubkey}`);
-        // Keep the placeholder if timeout occurs
       }, 5000);
 
       // Subscribe to metadata events
@@ -91,13 +131,11 @@ export function useNostr() {
               });
             } catch (error) {
               console.error(`Failed to parse metadata for ${pubkey}:`, error);
-              // Placeholder already set, no need to update
             }
           },
           error: (error) => {
             clearTimeout(timeoutId);
             console.error(`Error receiving metadata for ${pubkey}:`, error);
-            // Placeholder already set, no need to update
           }
         });
 
@@ -105,7 +143,6 @@ export function useNostr() {
       rxReq.emit(filter);
     } catch (error) {
       console.error(`Failed to fetch metadata for ${pubkey}:`, error);
-      // Placeholder already set, no need to update
     }
   };
 
@@ -115,7 +152,6 @@ export function useNostr() {
 
     const fetchFromRelays = async () => {
       try {
-        // Create filter
         const filter = {
           kinds: [1],
           limit: 100,
@@ -134,7 +170,7 @@ export function useNostr() {
                 if (currentPosts.has(event.id)) return currentPosts;
 
                 console.log(`New post received from ${event.pubkey}`);
-                // Fetch user metadata if not already cached
+                // バックグラウンドでメタデータを更新
                 fetchUserMetadata(event.pubkey);
 
                 // Create a temporary post object
