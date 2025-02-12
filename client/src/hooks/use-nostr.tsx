@@ -2,7 +2,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Post, User } from "@shared/schema";
 import { useToast } from "./use-toast";
-import { createRxNostr } from 'rx-nostr';
+import { createRxNostr, createRxForwardReq } from 'rx-nostr';
+import { verifier } from 'rx-nostr-crypto';
 import { bytesToHex } from '@noble/hashes/utils';
 import { useEffect, useRef } from "react";
 import type { RxNostr } from 'rx-nostr';
@@ -13,7 +14,9 @@ export function useNostr() {
 
   // Initialize rx-nostr on mount
   useEffect(() => {
-    rxRef.current = createRxNostr([]);
+    rxRef.current = createRxNostr({
+      verifier // 必須のverifierを設定
+    });
     return () => {
       if (rxRef.current) {
         rxRef.current.dispose();
@@ -35,7 +38,7 @@ export function useNostr() {
       // Get read-enabled relay URLs
       const readRelays = user.relays
         .filter(relay => relay.read)
-        .map(relay => ({ url: relay.url }));
+        .map(relay => relay.url);
 
       if (readRelays.length === 0) {
         throw new Error("No read-enabled relays configured");
@@ -44,8 +47,8 @@ export function useNostr() {
       console.log("Fetching events from relays:", readRelays);
 
       try {
-        // Create a new RxNostr instance with the current relays
-        rxRef.current = createRxNostr(readRelays);
+        // Set default relays for this query
+        rxRef.current.setDefaultRelays(readRelays);
 
         // Create filter
         const filter = {
@@ -55,11 +58,14 @@ export function useNostr() {
         };
         console.log("Using filter:", filter);
 
-        // Create a promise to collect events
+        // Create a promise to collect events using rxReq
         const eventsPromise = new Promise<any[]>((resolve) => {
           const events: any[] = [];
+          const rxReq = createRxForwardReq();
+
+          // Define a listener
           const subscription = rxRef.current!
-            .pipe(filter)
+            .use(rxReq)
             .subscribe({
               next: ({ event }) => {
                 events.push(event);
@@ -68,6 +74,9 @@ export function useNostr() {
                 console.error("Error receiving events:", error);
               }
             });
+
+          // Emit filter to start subscription
+          rxReq.emit(filter);
 
           // Auto-complete after 5 seconds
           setTimeout(() => {
@@ -88,7 +97,7 @@ export function useNostr() {
               content: event.content,
               sig: event.sig,
               tags: event.tags,
-              relays: readRelays.map(r => r.url)
+              relays: readRelays
             });
             return await res.json();
           } catch (error) {
