@@ -485,15 +485,12 @@ export function useNostr() {
       }
 
       debugLog("Creating new post event");
-      const signer = seckeySigner(user.privateKey);
-
-      // Create and sign the event
-      const event = await signer.sign({
+      const event = {
         kind: 1,
         content,
         created_at: Math.floor(Date.now() / 1000),
         tags: [],
-      });
+      };
 
       debugLog("Sending signed post with content:", content);
 
