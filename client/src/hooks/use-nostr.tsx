@@ -1,8 +1,8 @@
 import { useMutation } from "@tanstack/react-query";
 import { Post } from "@shared/schema";
 import { useToast } from "./use-toast";
-import { createRxNostr, createRxForwardReq, verifier, nip07Signer } from "rx-nostr";
-import { seckeySigner } from "rx-nostr-crypto";
+import { createRxNostr, createRxForwardReq, nip07Signer } from "rx-nostr";
+import { verifier, seckeySigner } from "rx-nostr-crypto";
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { RxNostr } from "rx-nostr";
 import { useAuth } from "./use-auth";
