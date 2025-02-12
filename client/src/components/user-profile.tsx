@@ -42,7 +42,7 @@ export default function UserProfile({ user }: UserProfileProps) {
       <Card>
         <CardHeader className="flex flex-row items-center gap-4">
           <Avatar className="h-16 w-16">
-            <AvatarImage src={user.picture} />
+            <AvatarImage src={user.picture || undefined} />
             <AvatarFallback>
               {user.username.slice(0, 2).toUpperCase()}
             </AvatarFallback>
@@ -50,32 +50,33 @@ export default function UserProfile({ user }: UserProfileProps) {
           <div className="flex-1">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">@{user.username}</h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsEditing(true)}
-              >
-                <Edit className="h-4 w-4" />
-              </Button>
             </div>
             <p className="text-sm text-muted-foreground truncate">
               {user.publicKey}
             </p>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4 text-center">
             <div>
-              <p className="font-semibold">Following</p>
+              <p className="font-semibold">フォロー中</p>
               <p className="text-muted-foreground">
                 {user.following?.length || 0}
               </p>
             </div>
             <div>
-              <p className="font-semibold">Posts</p>
+              <p className="font-semibold">投稿</p>
               <p className="text-muted-foreground">0</p>
             </div>
           </div>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => setIsEditing(true)}
+          >
+            <Edit className="mr-2 h-4 w-4" />
+            プロフィールを編集
+          </Button>
         </CardContent>
       </Card>
 
