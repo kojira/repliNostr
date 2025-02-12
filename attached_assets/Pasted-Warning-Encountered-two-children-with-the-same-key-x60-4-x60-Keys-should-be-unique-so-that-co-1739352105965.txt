@@ -1,0 +1,29 @@
+Warning: Encountered two children with the same key, &#x60;4&#x60;. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+    at div
+    at main
+    at div
+    at div
+    at div
+    at HomePage (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/src/pages/home-page.tsx:27:36)
+    at Route (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=2e1ace14:323:16)
+    at ProtectedRoute (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/src/lib/protected-route.tsx:22:3)
+    at Switch (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=2e1ace14:379:17)
+    at AuthProvider (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/src/hooks/use-auth.tsx:26:32)
+    at QueryClientProvider (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=2e1ace14:2805:3)
+    at App
+at div
+at main
+at div
+at div
+at div
+at HomePage (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/src/pages/home-page.tsx:27:36)
+at Route (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=2e1ace14:323:16)
+at ProtectedRoute (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/src/lib/protected-route.tsx:22:3)
+at Switch (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=2e1ace14:379:17)
+at AuthProvider (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/src/hooks/use-auth.tsx:26:32)
+at QueryClientProvider (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=2e1ace14:2805:3)
+at App
+at t.value (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:17465)
+at new t (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:12630)
+at t.value (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:32766)
+at https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:34400
