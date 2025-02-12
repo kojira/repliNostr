@@ -11,7 +11,7 @@
         if (redirect && redirect !== location.href) {
           const segments = redirect.split('?/');
           if (segments.length === 2) {
-            history.replaceState(null, null, segments[1].split('?')[0]);
+            history.replaceState(null, null, '/' + segments[1].split('?')[0]);
           }
         }
       })();
