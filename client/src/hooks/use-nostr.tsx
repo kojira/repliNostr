@@ -16,7 +16,6 @@ interface UserMetadata {
 const DEFAULT_RELAYS = [
   "wss://r.kojira.io",
   "wss://x.kojira.io",
-  // 必要に応じて他のリレーを追加
 ];
 
 // ローカルストレージのキー
@@ -155,7 +154,7 @@ export function useNostr() {
     metadataUpdateQueue.current.add(pubkey);
     pendingMetadataRequests.current.add(pubkey);
 
-    // Set initial placeholder
+    // Set initial placeholder if not exists
     setUserMetadata(current => {
       const updated = new Map(current);
       if (!updated.has(pubkey)) {
