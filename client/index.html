@@ -34,9 +34,10 @@
                             console.log("[Debug] Redirecting from:", redirect);
                             // Ensure path is relative to /repliNostr/
                             const baseUrl = window.__ENV.BASE_URL;
-                            const newPath = redirect
-                                .replace(location.origin, "")
-                                .replace("/repliNostr/", "/");
+                            const newPath = redirect.replace(
+                                location.origin,
+                                "",
+                            );
                             console.log("[Debug] New path:", newPath);
                             history.replaceState(null, null, baseUrl + newPath);
                         }
