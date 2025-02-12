@@ -13,11 +13,17 @@
         if (location.hostname.includes('github.io')) {
             console.log('404 - GitHub Pages environment detected');
             const url = window.location.href;
-            sessionStorage.redirect = url;
-            window.location.href = window.location.origin + '/repliNostr/';
+            // 既にsessionStorageにリダイレクト情報がある場合は無限ループを防ぐ
+            if (!sessionStorage.redirect) {
+                sessionStorage.redirect = url;
+                window.location.replace(window.location.origin + '/repliNostr/');
+            } else {
+                console.log('404 - Redirect loop detected, clearing sessionStorage');
+                sessionStorage.removeItem('redirect');
+            }
         } else {
             console.log('404 - Development environment detected');
-            window.location.href = '/';
+            window.location.replace('/');
         }
     </script>
 </head>

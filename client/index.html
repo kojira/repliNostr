@@ -13,16 +13,20 @@
 
         // Handle GitHub Pages SPA redirect
         (function() {
-            const redirect = sessionStorage.redirect;
-            delete sessionStorage.redirect;
-
             // Only handle redirects for GitHub Pages
             if (location.hostname.includes('github.io')) {
-                if (redirect && redirect !== location.href) {
-                    console.log('GitHub Pages redirect from:', redirect);
-                    const newPath = redirect.replace(location.origin + '/repliNostr', '');
-                    console.log('New path:', newPath);
-                    history.replaceState(null, null, newPath);
+                const redirect = sessionStorage.redirect;
+                if (redirect) {
+                    // Clear stored redirect to prevent loops
+                    delete sessionStorage.redirect;
+
+                    if (redirect !== location.href) {
+                        console.log('GitHub Pages redirect from:', redirect);
+                        // Ensure path is relative to /repliNostr/
+                        const newPath = new URL(redirect).pathname.replace('/repliNostr/', '');
+                        console.log('New path:', newPath);
+                        history.replaceState(null, null, newPath);
+                    }
                 }
             } else {
                 console.log('Development environment - no redirect needed');
