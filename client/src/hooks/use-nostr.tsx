@@ -96,15 +96,53 @@ export function useNostr() {
     processBatchMetadataUpdate();
   }, [isSubscriptionReady, userMetadata, debugLog]);
 
-  // イベントキャッシュを保存
+  // イベントキャッシュと投稿の管理を改善
+  const MAX_CACHED_EVENTS = 100;
+
+  const updatePostsAndCache = (event: any, post: Post) => {
+    eventsMemoryCache.set(event.id, {
+      data: post,
+      timestamp: Date.now()
+    });
+
+    // メモリキャッシュを最新100件に制限
+    const sortedEvents = Array.from(eventsMemoryCache.entries())
+      .sort(([, a], [, b]) => new Date(b.data.createdAt).getTime() - new Date(a.data.createdAt).getTime())
+      .slice(0, MAX_CACHED_EVENTS);
+
+    eventsMemoryCache.clear();
+    sortedEvents.forEach(([id, data]) => eventsMemoryCache.set(id, data));
+
+    setPosts(currentPosts => {
+      const updatedPosts = new Map(currentPosts);
+      updatedPosts.set(event.id, post);
+
+      // 投稿も最新100件に制限
+      const sortedPosts = Array.from(updatedPosts.entries())
+        .sort(([, a], [, b]) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, MAX_CACHED_EVENTS);
+
+      return new Map(sortedPosts);
+    });
+
+    // メタデータ取得を試みる
+    loadOrQueueMetadata(event.pubkey);
+  };
+
+  // キャッシュを保存する処理を修正
   useEffect(() => {
     const saveInterval = setInterval(() => {
       try {
         if (posts.size > 0) {
-          const eventsObject = Object.fromEntries(posts);
+          // 最新100件のみを保存
+          const sortedPosts = Array.from(posts.entries())
+            .sort(([, a], [, b]) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .slice(0, MAX_CACHED_EVENTS);
+
+          const eventsObject = Object.fromEntries(sortedPosts);
           localStorage.setItem(EVENTS_CACHE_KEY, JSON.stringify(eventsObject));
           localStorage.setItem(EVENTS_TIMESTAMP_KEY, Date.now().toString());
-          debugLog(`Saved ${posts.size} events to cache`);
+          debugLog(`Saved ${sortedPosts.length} events to cache`);
         }
       } catch (error) {
         debugLog('Error saving events cache:', error);
@@ -297,7 +335,7 @@ export function useNostr() {
         }
         setInitialized(true);
 
-        // イベントを処理する共通関数
+        // イベント処理の共通関数を修正
         const processEvent = (event: any) => {
           if (seenEvents.current.has(event.id)) {
             debugLog(`Skipping duplicate event: ${event.id}`);
@@ -321,19 +359,7 @@ export function useNostr() {
             }
           };
 
-          eventsMemoryCache.set(event.id, {
-            data: post,
-            timestamp: Date.now()
-          });
-
-          setPosts(currentPosts => {
-            const updatedPosts = new Map(currentPosts);
-            updatedPosts.set(event.id, post);
-            return updatedPosts;
-          });
-
-          // 常にメタデータ取得を試みる
-          loadOrQueueMetadata(event.pubkey);
+          updatePostsAndCache(event, post);
         };
 
         // 過去のイベントを取得
