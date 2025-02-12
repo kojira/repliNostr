@@ -19,12 +19,35 @@ export function useNostr() {
   const rxRef = useRef<RxNostr | null>(null);
   const [posts, setPosts] = useState<Map<string, Post>>(new Map());
   const [userMetadata, setUserMetadata] = useState<Map<string, UserMetadata>>(new Map());
+  const [relays, setRelays] = useState<string[]>([]);
 
-  // Initialize rx-nostr on mount
+  // Initialize rx-nostr and fetch relays on mount
   useEffect(() => {
     rxRef.current = createRxNostr({
       verifier
     });
+
+    // Get relay configuration
+    const fetchRelays = async () => {
+      try {
+        const userRes = await apiRequest("GET", "/api/user");
+        const user: User = await userRes.json();
+        const readRelays = user.relays
+          .filter(relay => relay.read)
+          .map(relay => relay.url);
+
+        setRelays(readRelays);
+
+        if (rxRef.current && readRelays.length > 0) {
+          rxRef.current.setDefaultRelays(readRelays);
+        }
+      } catch (error) {
+        console.error("Failed to fetch relays:", error);
+      }
+    };
+
+    fetchRelays();
+
     return () => {
       if (rxRef.current) {
         rxRef.current.dispose();
@@ -32,39 +55,11 @@ export function useNostr() {
     };
   }, []);
 
-  // Load cached posts from database
-  const postsQuery = useQuery<Post[]>({
-    queryKey: ["/api/posts"],
-    queryFn: async () => {
-      const res = await apiRequest("GET", "/api/posts");
-      const cachedPosts = await res.json();
-      // Update posts Map with cached data
-      setPosts(new Map(cachedPosts.map(post => [post.nostrEventId, post])));
-      return cachedPosts;
-    },
-  });
-
-  // Function to fetch user metadata
+  // Function to fetch user metadata from relays
   const fetchUserMetadata = async (pubkey: string) => {
-    if (!rxRef.current || userMetadata.has(pubkey)) return;
+    if (!rxRef.current || userMetadata.has(pubkey) || relays.length === 0) return;
 
     try {
-      // Get the current user and their relay settings
-      const userRes = await apiRequest("GET", "/api/user");
-      const user: User = await userRes.json();
-
-      // Get read-enabled relay URLs
-      const readRelays = user.relays
-        .filter(relay => relay.read)
-        .map(relay => relay.url);
-
-      if (readRelays.length === 0) {
-        throw new Error("No read-enabled relays configured");
-      }
-
-      // Set default relays for this query
-      rxRef.current.setDefaultRelays(readRelays);
-
       // Create filter for kind 0 (metadata) events
       const filter = {
         kinds: [0],
@@ -101,6 +96,18 @@ export function useNostr() {
       console.error("Failed to fetch user metadata:", error);
     }
   };
+
+  // Load cached posts from database
+  const postsQuery = useQuery<Post[]>({
+    queryKey: ["/api/posts"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/posts");
+      const cachedPosts = await res.json();
+      // Update posts Map with cached data
+      setPosts(new Map(cachedPosts.map(post => [post.nostrEventId, post])));
+      return cachedPosts;
+    },
+  });
 
   // Subscribe to new posts from relays
   useEffect(() => {
