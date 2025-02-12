@@ -71,7 +71,6 @@ export function useNostr() {
         // Convert private key to proper format and get public key
         const privateKeyBytes = hexToBytes(user.privateKey);
         const pubkeyHex = getPublicKey(user.privateKey);
-        console.log("Private key (hex):", user.privateKey);
         console.log("Public key (hex):", pubkeyHex);
 
         // Create the Nostr event
