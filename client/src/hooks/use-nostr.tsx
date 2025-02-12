@@ -2,10 +2,11 @@ import { useMutation } from "@tanstack/react-query";
 import { Post } from "@shared/schema";
 import { useToast } from "./use-toast";
 import { createRxNostr, createRxForwardReq } from "rx-nostr";
-import { verifier } from "rx-nostr-crypto";
+import { verifier, seckeySigner } from "rx-nostr-crypto";
 import { bytesToHex } from "@noble/hashes/utils";
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { RxNostr } from "rx-nostr";
+import { useAuth } from "./use-auth";
 
 const METADATA_CACHE_KEY = "nostr_metadata_cache";
 const METADATA_TIMESTAMP_KEY = "nostr_metadata_timestamp";
@@ -103,6 +104,7 @@ const storage = {
 
 export function useNostr() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [initialized, setInitialized] = useState(false);
   const [posts, setPosts] = useState<Map<string, Post>>(new Map());
   const [userMetadata, setUserMetadata] = useState<Map<string, UserMetadata>>(
@@ -458,6 +460,69 @@ export function useNostr() {
     initializeNostr();
   }, [debugLog, toast, updatePostsAndCache]);
 
+  // Create post mutation
+  const createPostMutation = useMutation({
+    mutationFn: async (content: string) => {
+      if (!user?.privateKey) {
+        throw new Error("Private key not available");
+      }
+
+      const signer = seckeySigner(user.privateKey);
+      if (!globalRxInstance) {
+        throw new Error("rx-nostr instance not initialized");
+      }
+
+      const event = await signer.sign({
+        kind: 1,
+        content,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [],
+      });
+
+      return new Promise<Post>((resolve, reject) => {
+        try {
+          globalRxInstance!.send(event).then(() => {
+            const post: Post = {
+              id: 0,
+              userId: user.id,
+              content: event.content,
+              createdAt: new Date(event.created_at * 1000).toISOString(),
+              nostrEventId: event.id,
+              pubkey: event.pubkey,
+              signature: event.sig,
+              metadata: {
+                tags: event.tags,
+                relays: DEFAULT_RELAYS,
+              },
+            };
+            resolve(post);
+          }).catch(reject);
+        } catch (error) {
+          reject(error);
+        }
+      });
+    },
+    onSuccess: (post) => {
+      setPosts((currentPosts) => {
+        const updatedPosts = new Map(currentPosts);
+        updatedPosts.set(post.nostrEventId, post);
+        return updatedPosts;
+      });
+      toast({
+        title: "Success",
+        description: "Post created successfully",
+      });
+    },
+    onError: (error) => {
+      console.error("Error creating post:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create post",
+        variant: "destructive",
+      });
+    },
+  });
+
   return {
     posts: Array.from(posts.values()).sort(
       (a, b) =>
@@ -469,5 +534,8 @@ export function useNostr() {
       [userMetadata],
     ),
     loadPostMetadata,
+    // Add createPost function and loading state
+    createPost: createPostMutation.mutate,
+    isCreatingPost: createPostMutation.isPending,
   };
 }
