@@ -14,39 +14,27 @@ interface UserMetadata {
   about?: string;
 }
 
+const DEFAULT_RELAYS = [
+  "wss://r.kojira.io",
+  "wss://x.kojira.io",
+  // 必要に応じて他のリレーを追加
+];
+
 export function useNostr() {
   const { toast } = useToast();
   const rxRef = useRef<RxNostr | null>(null);
   const [posts, setPosts] = useState<Map<string, Post>>(new Map());
   const [userMetadata, setUserMetadata] = useState<Map<string, UserMetadata>>(new Map());
-  const [relays, setRelays] = useState<string[]>([]);
 
-  // Initialize rx-nostr and fetch relays on mount
+  // Initialize rx-nostr and set default relays
   useEffect(() => {
     rxRef.current = createRxNostr({
       verifier
     });
 
-    // Get relay configuration
-    const fetchRelays = async () => {
-      try {
-        const userRes = await apiRequest("GET", "/api/user");
-        const user: User = await userRes.json();
-        const readRelays = user.relays
-          .filter(relay => relay.read)
-          .map(relay => relay.url);
-
-        setRelays(readRelays);
-
-        if (rxRef.current && readRelays.length > 0) {
-          rxRef.current.setDefaultRelays(readRelays);
-        }
-      } catch (error) {
-        console.error("Failed to fetch relays:", error);
-      }
-    };
-
-    fetchRelays();
+    if (rxRef.current) {
+      rxRef.current.setDefaultRelays(DEFAULT_RELAYS);
+    }
 
     return () => {
       if (rxRef.current) {
@@ -57,7 +45,7 @@ export function useNostr() {
 
   // Function to fetch user metadata from relays
   const fetchUserMetadata = async (pubkey: string) => {
-    if (!rxRef.current || userMetadata.has(pubkey) || relays.length === 0) return;
+    if (!rxRef.current || userMetadata.has(pubkey)) return;
 
     try {
       // Create filter for kind 0 (metadata) events
@@ -115,24 +103,6 @@ export function useNostr() {
 
     const fetchFromRelays = async () => {
       try {
-        // Get the current user and their relay settings
-        const userRes = await apiRequest("GET", "/api/user");
-        const user: User = await userRes.json();
-
-        // Get read-enabled relay URLs
-        const readRelays = user.relays
-          .filter(relay => relay.read)
-          .map(relay => relay.url);
-
-        if (readRelays.length === 0) {
-          throw new Error("No read-enabled relays configured");
-        }
-
-        console.log("Fetching events from relays:", readRelays);
-
-        // Set default relays for this query
-        rxRef.current.setDefaultRelays(readRelays);
-
         // Create filter
         const filter = {
           kinds: [1],
@@ -171,7 +141,7 @@ export function useNostr() {
                   signature: event.sig,
                   metadata: {
                     tags: event.tags || [],
-                    relays: readRelays
+                    relays: DEFAULT_RELAYS
                   }
                 };
 
@@ -186,7 +156,7 @@ export function useNostr() {
                   content: event.content,
                   sig: event.sig,
                   tags: event.tags,
-                  relays: readRelays
+                  relays: DEFAULT_RELAYS
                 }).catch(error => {
                   console.error("Failed to cache event:", error);
                 });
@@ -219,18 +189,6 @@ export function useNostr() {
       console.log("Creating Nostr event for user:", user.username);
 
       try {
-        // Get write-enabled relay URLs
-        const writeRelays = user.relays
-          .filter(relay => relay.write)
-          .map(relay => ({ url: relay.url }));
-
-        if (writeRelays.length === 0) {
-          throw new Error("No write-enabled relays configured");
-        }
-
-        // Create a new RxNostr instance with the current relays
-        rxRef.current = createRxNostr(writeRelays);
-
         // Create event
         const event = {
           kind: 1,
@@ -252,7 +210,7 @@ export function useNostr() {
         };
 
         // Publish event
-        await rxRef.current.send(signedEvent);
+        await rxRef.current!.send(signedEvent);
 
         // Cache the event in our database
         const cacheRes = await apiRequest("POST", "/api/posts/cache", {
@@ -261,7 +219,7 @@ export function useNostr() {
           content: signedEvent.content,
           sig: signedEvent.sig,
           tags: signedEvent.tags,
-          relays: writeRelays.map(r => r.url)
+          relays: DEFAULT_RELAYS
         });
 
         return await cacheRes.json();
@@ -297,18 +255,6 @@ export function useNostr() {
         // Create metadata content
         const content = JSON.stringify(profile);
 
-        // Get write-enabled relays
-        const writeRelays = user.relays
-          .filter(relay => relay.write)
-          .map(relay => ({ url: relay.url }));
-
-        if (writeRelays.length === 0) {
-          throw new Error("No write-enabled relays configured");
-        }
-
-        // Create a new RxNostr instance with the current relays
-        rxRef.current = createRxNostr(writeRelays);
-
         // Create event
         const event = {
           kind: 0,
@@ -330,7 +276,7 @@ export function useNostr() {
         };
 
         // Publish event
-        await rxRef.current.send(signedEvent);
+        await rxRef.current!.send(signedEvent);
 
         // Update user profile in database
         await apiRequest("POST", "/api/profile", profile);
