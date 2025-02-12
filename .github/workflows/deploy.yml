@@ -30,15 +30,17 @@ jobs:
           export BASE_URL="/repliNostr/"
           # Build the project
           npm run build
-          # Ensure public directory exists and copy 404.html
-          mkdir -p dist/public
-          cp ./client/public/404.html ./dist/public/
+          # Create public directory and copy build output
+          mkdir -p public
+          cp -r dist/public/* public/
+          # Copy 404.html
+          cp ./client/public/404.html ./public/
           # Create .nojekyll file to prevent Jekyll processing
-          touch ./dist/public/.nojekyll
+          touch ./public/.nojekyll
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist/public
+          publish_dir: ./public
           force_orphan: true # Clean up gh-pages branch
