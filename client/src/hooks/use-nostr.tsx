@@ -50,6 +50,7 @@ export function useNostr() {
   const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
   const [posts, setPosts] = useState<Map<string, Post>>(new Map());
   const [userMetadata, setUserMetadata] = useState<Map<string, UserMetadata>>(new Map());
+  const initialLoadRef = useRef(false);
   const pendingMetadataRequests = useRef<Set<string>>(new Set());
   const metadataUpdateQueue = useRef<Set<string>>(new Set());
   const retryCount = useRef<Map<string, number>>(new Map());
@@ -144,17 +145,15 @@ export function useNostr() {
                 });
 
                 setUserMetadata(current => {
-                  if (!current.has(event.pubkey)) {
-                    const updated = new Map(current);
-                    updated.set(event.pubkey, processedMetadata);
-                    return updated;
-                  }
-                  return current;
+                  const updated = new Map(current);
+                  updated.set(event.pubkey, processedMetadata);
+                  return updated;
                 });
 
                 pendingMetadataRequests.current.delete(event.pubkey);
                 retryCount.current.delete(event.pubkey);
               } catch (error) {
+                debugLog('Error processing metadata:', error);
                 const currentRetries = retryCount.current.get(event.pubkey) || 0;
                 if (currentRetries < MAX_RETRIES) {
                   metadataUpdateQueue.current.add(event.pubkey);
@@ -164,6 +163,7 @@ export function useNostr() {
               }
             },
             error: (error) => {
+              debugLog('Metadata request error:', error);
               reject(error);
             },
             complete: () => {
@@ -180,11 +180,10 @@ export function useNostr() {
         };
       });
     } catch (error) {
-      // エラーは無視し、次のバッチ処理で再試行
+      debugLog('Error in batch update:', error);
     } finally {
       isProcessingBatch = false;
 
-      // 次のバッチ処理をスケジュール（現在のバッチが完了した後）
       if (metadataUpdateQueue.current.size > 0) {
         setTimeout(() => {
           processBatchMetadataUpdate();
@@ -195,14 +194,13 @@ export function useNostr() {
 
   // メタデータ取得の最適化されたインターフェース
   const loadPostMetadata = useCallback((pubkey: string) => {
-    if (!globalRxInstance || !isSubscriptionReady || !isInitialLoadComplete) {
-      debugLog(`Metadata load skipped: rxInstance=${!!globalRxInstance}, ready=${isSubscriptionReady}, initialLoad=${isInitialLoadComplete}`);
+    if (!globalRxInstance || !isSubscriptionReady || !initialLoadRef.current) {
+      debugLog(`Metadata load skipped: rxInstance=${!!globalRxInstance}, ready=${isSubscriptionReady}, initialLoad=${initialLoadRef.current}`);
       return;
     }
 
     debugLog(`Attempting to load metadata for pubkey: ${pubkey}`);
 
-    // メモリキャッシュをチェック
     const memCached = metadataMemoryCache.get(pubkey);
     if (memCached && (Date.now() - memCached.timestamp < CACHE_TTL)) {
       if (!memCached.error) {
@@ -219,24 +217,15 @@ export function useNostr() {
       }
     }
 
-    // リクエスト制御
-    const lastRequest = metadataRequestTimes.get(pubkey) || 0;
-    const now = Date.now();
-    if (now - lastRequest < METADATA_REQUEST_INTERVAL) {
-      debugLog(`Skipping request for ${pubkey} due to rate limiting`);
-      return;
-    }
-
     if (!pendingMetadataRequests.current.has(pubkey) && !metadataUpdateQueue.current.has(pubkey)) {
       debugLog(`Adding ${pubkey} to metadata update queue`);
       metadataUpdateQueue.current.add(pubkey);
-      metadataRequestTimes.set(pubkey, now);
 
       if (!isProcessingBatch) {
         processBatchMetadataUpdate();
       }
     }
-  }, [isSubscriptionReady, isInitialLoadComplete, processBatchMetadataUpdate, debugLog]);
+  }, [isSubscriptionReady, processBatchMetadataUpdate, debugLog]);
 
   // イベントとキャッシュの更新
   const updatePostsAndCache = useCallback((event: any, post: Post) => {
@@ -253,14 +242,13 @@ export function useNostr() {
       return updatedPosts;
     });
 
-    // メタデータ取得を試みる（初期ロード完了後のみ）
-    if (isInitialLoadComplete) {
+    if (initialLoadRef.current) {
       debugLog(`Initial load complete, requesting metadata for ${event.pubkey}`);
       loadPostMetadata(event.pubkey);
     } else {
       debugLog(`Initial load not complete, skipping metadata for ${event.pubkey}`);
     }
-  }, [loadPostMetadata, isInitialLoadComplete]);
+  }, [loadPostMetadata]);
 
   // rx-nostrの初期化
   useEffect(() => {
@@ -282,7 +270,6 @@ export function useNostr() {
         }
         setInitialized(true);
 
-        // イベント処理の共通関数
         const processEvent = (event: any) => {
           if (seenEvents.current.has(event.id)) {
             return;
@@ -308,22 +295,24 @@ export function useNostr() {
           updatePostsAndCache(event, post);
         };
 
-        // 継続的なサブスクリプションと初期フェッチをセットアップ
         const setupSubscriptions = () => {
           debugLog("Setting up subscriptions");
 
-          // 過去のイベントを取得
           const initialFilter = {
             kinds: [1],
             limit: 30,
             since: Math.floor(Date.now() / 1000) - 24 * 60 * 60
           };
 
+          let eventsProcessed = 0;
           const rxReqInitial = createRxForwardReq();
           const initialSubscription = globalRxInstance!
             .use(rxReqInitial)
             .subscribe({
-              next: ({ event }) => processEvent(event),
+              next: ({ event }) => {
+                processEvent(event);
+                eventsProcessed++;
+              },
               error: (error) => {
                 debugLog("Initial fetch error:", error);
                 toast({
@@ -333,12 +322,12 @@ export function useNostr() {
                 });
               },
               complete: () => {
-                debugLog("Initial fetch completed");
+                debugLog(`Initial fetch completed, processed ${eventsProcessed} events`);
+                initialLoadRef.current = true;
                 setIsInitialLoadComplete(true);
               }
             });
 
-          // リアルタイム更新用のサブスクリプション
           const continuousFilter = {
             kinds: [1],
             since: Math.floor(Date.now() / 1000)
@@ -355,7 +344,6 @@ export function useNostr() {
               }
             });
 
-          // フィルターを発行
           rxReqInitial.emit(initialFilter);
           rxReqContinuous.emit(continuousFilter);
 
@@ -366,11 +354,9 @@ export function useNostr() {
           };
         };
 
-        // サブスクリプションの準備が整ったことを通知
         setIsSubscriptionReady(true);
         debugLog("Subscription ready, starting setup");
 
-        // サブスクリプションを開始
         return setupSubscriptions();
 
       } catch (error) {
