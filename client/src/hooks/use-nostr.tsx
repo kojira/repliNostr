@@ -18,21 +18,23 @@ const DEFAULT_RELAYS = [
   "wss://x.kojira.io",
 ];
 
-// ローカルストレージのキー
 const METADATA_CACHE_KEY = 'nostr_metadata_cache';
 const METADATA_TIMESTAMP_KEY = 'nostr_metadata_timestamp';
 const EVENTS_CACHE_KEY = 'nostr_events_cache';
 const EVENTS_TIMESTAMP_KEY = 'nostr_events_timestamp';
 const CACHE_TTL = 1000 * 60 * 60 * 3; // 3時間
 const EVENTS_CACHE_TTL = 1000 * 60 * 5; // 5分
-const MAX_CACHED_METADATA = 1000; // メタデータの最大キャッシュ数
-const MAX_CACHED_EVENTS = 100; // イベントの最大キャッシュ数
+const MAX_CACHED_METADATA = 1000;
+const MAX_CACHED_EVENTS = 100;
+const METADATA_BATCH_SIZE = 10; // 一度に処理するメタデータの数
+const METADATA_REQUEST_INTERVAL = 1000; // メタデータリクエスト間隔（ミリ秒）
 
 // メモリ内キャッシュ
 const metadataMemoryCache = new Map<string, { data: UserMetadata; timestamp: number; error?: string }>();
 const eventsMemoryCache = new Map<string, { data: Post; timestamp: number }>();
+const metadataRequestTimes = new Map<string, number>(); // リクエスト時刻を追跡
 
-// シングルトンとしてrx-nostrインスタンスを管理
+// rx-nostrインスタンス管理（変更なし）
 let globalRxInstance: RxNostr | null = null;
 let globalInitialized = false;
 
@@ -44,11 +46,11 @@ export function useNostr() {
   const pendingMetadataRequests = useRef<Set<string>>(new Set());
   const metadataUpdateQueue = useRef<Set<string>>(new Set());
   const retryCount = useRef<Map<string, number>>(new Map());
-  const MAX_RETRIES = 3;
   const [isSubscriptionReady, setIsSubscriptionReady] = useState(false);
   const activeSubscriptions = useRef<Set<string>>(new Set());
   const seenEvents = useRef<Set<string>>(new Set());
   const lastEventTimestamp = useRef<number>(0);
+  const lastMetadataRequest = useRef<number>(0);
   const DEBUG = true;
 
   const debugLog = useCallback((message: string, ...args: any[]) => {
@@ -57,7 +59,7 @@ export function useNostr() {
     }
   }, []);
 
-  // メタデータのキャッシュ管理
+  // キャッシュ管理の最適化
   const pruneMetadataCache = useCallback(() => {
     if (metadataMemoryCache.size > MAX_CACHED_METADATA) {
       const sortedEntries = Array.from(metadataMemoryCache.entries())
@@ -70,52 +72,63 @@ export function useNostr() {
     }
   }, [debugLog]);
 
-  // メタデータ更新のバッチ処理
+  // メタデータ更新の最適化されたバッチ処理
   const processBatchMetadataUpdate = useCallback(() => {
     if (!globalRxInstance || metadataUpdateQueue.current.size === 0 || !isSubscriptionReady) {
-      debugLog('Skipping metadata update: conditions not met');
       return;
     }
 
-    const pubkey = Array.from(metadataUpdateQueue.current)[0];
-    if (pendingMetadataRequests.current.has(pubkey)) {
-      debugLog(`Skipping metadata request for ${pubkey}: already pending`);
+    const now = Date.now();
+    if (now - lastMetadataRequest.current < METADATA_REQUEST_INTERVAL) {
       return;
     }
 
-    debugLog(`Processing metadata request for ${pubkey}`);
-    metadataUpdateQueue.current.delete(pubkey);
-    pendingMetadataRequests.current.add(pubkey);
+    // キューから未処理のpubkeyを取得（最大METADATA_BATCH_SIZE件）
+    const pubkeysToProcess = Array.from(metadataUpdateQueue.current)
+      .filter(pubkey => !pendingMetadataRequests.current.has(pubkey))
+      .slice(0, METADATA_BATCH_SIZE);
 
+    if (pubkeysToProcess.length === 0) {
+      return;
+    }
+
+    debugLog(`Processing metadata batch for ${pubkeysToProcess.length} pubkeys`);
+    lastMetadataRequest.current = now;
+
+    // バッチでメタデータをリクエスト
     const filter = {
       kinds: [0],
-      authors: [pubkey],
+      authors: pubkeysToProcess,
       limit: 1
     };
 
-    debugLog(`Requesting metadata with filter:`, filter);
+    pubkeysToProcess.forEach(pubkey => {
+      pendingMetadataRequests.current.add(pubkey);
+      metadataUpdateQueue.current.delete(pubkey);
+    });
 
     const rxReq = createRxForwardReq();
-    const timeoutMs = 5000;
+    const timeoutMs = 10000; // タイムアウトを10秒に延長
 
     const timeoutId = setTimeout(() => {
-      debugLog(`Metadata request timeout for ${pubkey}`);
-      const currentRetries = retryCount.current.get(pubkey) || 0;
-      if (currentRetries < MAX_RETRIES) {
-        debugLog(`Retrying metadata request for ${pubkey}, attempt ${currentRetries + 1}/${MAX_RETRIES}`);
-        retryCount.current.set(pubkey, currentRetries + 1);
-        metadataUpdateQueue.current.add(pubkey);
-      } else {
-        debugLog(`Max retries reached for ${pubkey}, using fallback`);
-        metadataMemoryCache.set(pubkey, {
-          data: { name: `nostr:${pubkey.slice(0, 8)}` },
-          timestamp: Date.now(),
-          error: 'Metadata fetch failed'
-        });
-      }
-      pendingMetadataRequests.current.delete(pubkey);
+      debugLog(`Batch metadata request timeout for ${pubkeysToProcess.length} pubkeys`);
+      pubkeysToProcess.forEach(pubkey => {
+        const currentRetries = retryCount.current.get(pubkey) || 0;
+        if (currentRetries < MAX_RETRIES) {
+          retryCount.current.set(pubkey, currentRetries + 1);
+          metadataUpdateQueue.current.add(pubkey);
+        } else {
+          metadataMemoryCache.set(pubkey, {
+            data: { name: `nostr:${pubkey.slice(0, 8)}` },
+            timestamp: now,
+            error: 'Metadata fetch failed'
+          });
+        }
+        pendingMetadataRequests.current.delete(pubkey);
+      });
+
       if (metadataUpdateQueue.current.size > 0) {
-        processBatchMetadataUpdate();
+        setTimeout(processBatchMetadataUpdate, METADATA_REQUEST_INTERVAL);
       }
     }, timeoutMs);
 
@@ -124,9 +137,7 @@ export function useNostr() {
       .subscribe({
         next: ({ event }) => {
           try {
-            debugLog(`Received metadata for ${event.pubkey}`);
             const metadata = JSON.parse(event.content) as UserMetadata;
-
             const processedMetadata = {
               name: metadata.name || `nostr:${event.pubkey.slice(0, 8)}`,
               picture: metadata.picture,
@@ -135,7 +146,7 @@ export function useNostr() {
 
             metadataMemoryCache.set(event.pubkey, {
               data: processedMetadata,
-              timestamp: Date.now()
+              timestamp: now
             });
 
             setUserMetadata(current => {
@@ -144,7 +155,7 @@ export function useNostr() {
               return updated;
             });
 
-            pruneMetadataCache();
+            pendingMetadataRequests.current.delete(event.pubkey);
             retryCount.current.delete(event.pubkey);
             debugLog(`Successfully processed metadata for ${event.pubkey}`);
           } catch (error) {
@@ -154,53 +165,43 @@ export function useNostr() {
               metadataUpdateQueue.current.add(event.pubkey);
               retryCount.current.set(event.pubkey, currentRetries + 1);
             }
-          } finally {
             pendingMetadataRequests.current.delete(event.pubkey);
-            clearTimeout(timeoutId);
-            if (metadataUpdateQueue.current.size > 0) {
-              processBatchMetadataUpdate();
-            }
           }
         },
         error: (error) => {
-          debugLog(`Metadata request error:`, error);
-          const currentRetries = retryCount.current.get(pubkey) || 0;
-          if (currentRetries < MAX_RETRIES) {
-            metadataUpdateQueue.current.add(pubkey);
-            retryCount.current.set(pubkey, currentRetries + 1);
-          }
-          pendingMetadataRequests.current.delete(pubkey);
-          clearTimeout(timeoutId);
-          if (metadataUpdateQueue.current.size > 0) {
-            processBatchMetadataUpdate();
-          }
+          debugLog(`Batch metadata request error:`, error);
+          pubkeysToProcess.forEach(pubkey => {
+            const currentRetries = retryCount.current.get(pubkey) || 0;
+            if (currentRetries < MAX_RETRIES) {
+              metadataUpdateQueue.current.add(pubkey);
+              retryCount.current.set(pubkey, currentRetries + 1);
+            }
+            pendingMetadataRequests.current.delete(pubkey);
+          });
         },
         complete: () => {
-          debugLog(`Metadata request completed for ${pubkey}`);
+          debugLog(`Batch metadata request completed`);
           clearTimeout(timeoutId);
+
+          // 次のバッチ処理をスケジュール
+          if (metadataUpdateQueue.current.size > 0) {
+            setTimeout(processBatchMetadataUpdate, METADATA_REQUEST_INTERVAL);
+          }
         }
       });
 
     rxReq.emit(filter);
-    debugLog(`Emitted filter for subscription ${pubkey}`);
+    debugLog(`Emitted filter for batch subscription`);
 
     return () => {
       subscription.unsubscribe();
       clearTimeout(timeoutId);
-      debugLog(`Cleaned up metadata request for ${pubkey}`);
     };
-  }, [isSubscriptionReady, debugLog, pruneMetadataCache]);
+  }, [isSubscriptionReady, debugLog]);
 
-  // メタデータ取得の新しいインターフェース
+  // 最適化されたメタデータ取得インターフェース
   const loadPostMetadata = useCallback((pubkey: string) => {
     if (!globalRxInstance || !isSubscriptionReady) {
-      debugLog(`Skipping metadata load for ${pubkey}: not ready`);
-      return;
-    }
-
-    // すでにメタデータが存在する場合はスキップ
-    if (userMetadata.has(pubkey)) {
-      debugLog(`Metadata already loaded for ${pubkey}`);
       return;
     }
 
@@ -208,27 +209,34 @@ export function useNostr() {
     const memCached = metadataMemoryCache.get(pubkey);
     if (memCached && (Date.now() - memCached.timestamp < CACHE_TTL)) {
       if (!memCached.error) {
-        debugLog(`Using cached metadata for ${pubkey}`);
         setUserMetadata(current => {
-          const updated = new Map(current);
-          updated.set(pubkey, memCached.data);
-          return updated;
+          if (!current.has(pubkey)) {
+            const updated = new Map(current);
+            updated.set(pubkey, memCached.data);
+            return updated;
+          }
+          return current;
         });
         return;
       }
     }
 
-    // 既にキューに入っているかリクエスト中の場合はスキップ
-    if (pendingMetadataRequests.current.has(pubkey) || metadataUpdateQueue.current.has(pubkey)) {
-      debugLog(`Metadata request already pending for ${pubkey}`);
+    // リクエスト制御
+    const lastRequest = metadataRequestTimes.get(pubkey) || 0;
+    const now = Date.now();
+    if (now - lastRequest < METADATA_REQUEST_INTERVAL) {
       return;
     }
 
-    // キューに追加して処理を開始
-    debugLog(`Queueing metadata request for ${pubkey}`);
-    metadataUpdateQueue.current.add(pubkey);
-    processBatchMetadataUpdate();
-  }, [isSubscriptionReady, userMetadata, debugLog, processBatchMetadataUpdate]);
+    if (!pendingMetadataRequests.current.has(pubkey) && !metadataUpdateQueue.current.has(pubkey)) {
+      metadataUpdateQueue.current.add(pubkey);
+      metadataRequestTimes.set(pubkey, now);
+      debugLog(`Queueing metadata request for ${pubkey}`);
+
+      // キューが追加されたらバッチ処理をスケジュール
+      setTimeout(processBatchMetadataUpdate, METADATA_REQUEST_INTERVAL);
+    }
+  }, [isSubscriptionReady, processBatchMetadataUpdate, debugLog]);
 
   const updatePostsAndCache = useCallback((event: any, post: Post) => {
     eventsMemoryCache.set(event.id, {
