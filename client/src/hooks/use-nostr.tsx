@@ -44,30 +44,49 @@ export function useNostr() {
       console.log("Fetching events from relays:", readRelays);
 
       try {
-        // Fetch recent events from relays using queryEvents
-        const sub = poolRef.current.sub(readRelays, [{
-          kinds: [1], // テキスト投稿
-          limit: 100,
-        }]);
+        // Create a promise to collect events
+        const eventsPromise = new Promise<any[]>((resolve, reject) => {
+          const events: any[] = [];
+          let completed = false;
 
-        const events: any[] = [];
-        await new Promise<void>((resolve, reject) => {
-          sub.on('event', (event: any) => {
-            events.push(event);
+          const onEvent = (event: any) => {
+            if (!completed) {
+              events.push(event);
+            }
+          };
+
+          const onEose = () => {
+            if (!completed) {
+              completed = true;
+              resolve(events);
+            }
+          };
+
+          // Subscribe to events
+          const filters = [{
+            kinds: [1],
+            limit: 100
+          }];
+
+          readRelays.forEach(url => {
+            if (poolRef.current) {
+              const relay = poolRef.current.addRelay(url);
+              relay.on('event', onEvent);
+              relay.on('eose', onEose);
+              relay.subscribe(filters);
+            }
           });
 
-          // Set a timeout to close the subscription after 3 seconds
+          // Set timeout for 5 seconds
           setTimeout(() => {
-            sub.unsub();
-            resolve();
-          }, 3000);
-
-          sub.on('eose', () => {
-            sub.unsub();
-            resolve();
-          });
+            if (!completed) {
+              completed = true;
+              resolve(events);
+            }
+          }, 5000);
         });
 
+        const events = await eventsPromise;
         console.log("Received events:", events);
 
         // Cache events in the database
@@ -151,7 +170,8 @@ export function useNostr() {
           const publishPromises = writeRelays.map(async (url) => {
             try {
               console.log(`Attempting to publish to relay: ${url}`);
-              const result = await poolRef.current!.publish([url], signedEvent);
+              const relay = poolRef.current!.addRelay(url);
+              const result = await relay.publish(signedEvent);
               console.log(`Publish result for ${url}:`, result);
               return result;
             } catch (error) {
@@ -254,7 +274,8 @@ export function useNostr() {
         const publishPromises = writeRelays.map(async (url) => {
           try {
             console.log(`Attempting to publish metadata to relay: ${url}`);
-            const result = await poolRef.current!.publish([url], signedEvent);
+            const relay = poolRef.current!.addRelay(url);
+            const result = await relay.publish(signedEvent);
             console.log(`Metadata publish result for ${url}:`, result);
             return result;
           } catch (error) {
