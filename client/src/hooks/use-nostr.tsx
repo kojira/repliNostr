@@ -404,14 +404,21 @@ export function useNostr() {
               complete: () => {
                 debugLog("Initial fetch completed, setting isInitialLoadComplete to true");
                 isInitialLoadComplete = true;
-                // 初期ロード完了後、表示されている全投稿のメタデータを取得
-                setPosts(currentPosts => {
-                  const uniquePubkeys = new Set<string>();
-                  currentPosts.forEach(post => uniquePubkeys.add(post.pubkey));
-                  debugLog(`Requesting metadata for ${uniquePubkeys.size} unique pubkeys after initial load`);
-                  uniquePubkeys.forEach(pubkey => loadPostMetadata(pubkey));
-                  return currentPosts;
+
+                // 初期ロード完了後すぐに全投稿のメタデータを取得
+                const uniquePubkeys = new Set<string>();
+                posts.forEach(post => uniquePubkeys.add(post.pubkey));
+                debugLog(`Requesting metadata for ${uniquePubkeys.size} unique pubkeys after initial load`);
+                uniquePubkeys.forEach(pubkey => {
+                  debugLog(`Queueing metadata request for pubkey: ${pubkey}`);
+                  metadataUpdateQueue.current.add(pubkey);
                 });
+
+                // バッチ処理が実行中でない場合のみ新しいバッチを開始
+                if (!isProcessingBatch) {
+                  debugLog('Starting initial metadata batch processing');
+                  processBatchMetadataUpdate();
+                }
               }
             });
 
@@ -461,7 +468,7 @@ export function useNostr() {
     };
 
     initializeNostr();
-  }, [debugLog, toast, updatePostsAndCache, loadPostMetadata]);
+  }, [debugLog, toast, updatePostsAndCache, loadPostMetadata, posts]);
 
   return {
     posts: Array.from(posts.values()).sort((a, b) =>

@@ -1,0 +1,31 @@
+[Nostr 2025-02-12T15:27:17.122Z] Processing event: 4472cc349b4b01b97bf192bf85843f6b70fcb93480fb0e52f3ec236e49301668 from f03df3d4134230420cdf7acbb35f96a2542424246ab052ba24c6fec6a4d4f676
+[Nostr 2025-02-12T15:27:17.122Z] Initial load not complete, skipping metadata for f03df3d4134230420cdf7acbb35f96a2542424246ab052ba24c6fec6a4d4f676
+[Nostr 2025-02-12T15:27:17.125Z] New event received: 4bf3f908e0edf389f3b26ac0ffab65e11af3583de8265f552ff6a03648a7aecd
+[Nostr 2025-02-12T15:27:17.125Z] Processing event: 4bf3f908e0edf389f3b26ac0ffab65e11af3583de8265f552ff6a03648a7aecd from b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T15:27:17.125Z] Initial load not complete, skipping metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T15:27:17.127Z] Metadata load skipped: rxInstance=true, ready=false, initialLoad=false
+[Nostr 2025-02-12T15:27:17.127Z] Metadata load skipped: rxInstance=true, ready=true, initialLoad=false
+[Nostr 2025-02-12T15:27:17.128Z] Metadata load skipped: rxInstance=true, ready=true, initialLoad=false
+[Nostr 2025-02-12T15:27:17.128Z] Using existing rx-nostr instance
+[Nostr 2025-02-12T15:27:17.129Z] Using existing rx-nostr instance
+[Nostr 2025-02-12T15:27:17.129Z] Metadata load skipped: rxInstance=true, ready=false, initialLoad=false
+[Nostr 2025-02-12T15:27:17.130Z] Metadata load skipped: rxInstance=true, ready=true, initialLoad=false
+[Nostr 2025-02-12T15:27:17.130Z] Using existing rx-nostr instance
+[Nostr 2025-02-12T15:27:17.130Z] Metadata load skipped: rxInstance=true, ready=true, initialLoad=false
+[Nostr 2025-02-12T15:27:17.132Z] New event received: ea07843f6944c4e9e4afd54ff307e4022172c5720c638123e35b386b7465d969
+[Nostr 2025-02-12T15:27:17.132Z] Processing event: ea07843f6944c4e9e4afd54ff307e4022172c5720c638123e35b386b7465d969 from cbab7074a03bf89c7dd1623e42e65409e3918662af6c65fe2e38c92ff9f0bd61
+[Nostr 2025-02-12T15:27:17.132Z] Initial load not complete, skipping metadata for cbab7074a03bf89c7dd1623e42e65409e3918662af6c65fe2e38c92ff9f0bd61
+[Nostr 2025-02-12T15:27:17.142Z] New event received: 55d5c96eda7b1a5738c043a9efb19577b6d47759670591b3ab9171722f1b2804
+[Nostr 2025-02-12T15:27:17.142Z] Processing event: 55d5c96eda7b1a5738c043a9efb19577b6d47759670591b3ab9171722f1b2804 from b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T15:27:17.142Z] Initial load not complete, skipping metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T15:27:17.176Z] Metadata load skipped: rxInstance=true, ready=false, initialLoad=false
+[Nostr 2025-02-12T15:27:17.177Z] Metadata load skipped: rxInstance=true, ready=false, initialLoad=false
+[Nostr 2025-02-12T15:27:17.177Z] Metadata load skipped: rxInstance=true, ready=true, initialLoad=false
+[Nostr 2025-02-12T15:27:17.177Z] Using existing rx-nostr instance
+[Nostr 2025-02-12T15:27:17.178Z] Using existing rx-nostr instance
+[Nostr 2025-02-12T15:27:17.178Z] Metadata load skipped: rxInstance=true, ready=false, initialLoad=false
+[Nostr 2025-02-12T15:27:17.178Z] Metadata load skipped: rxInstance=true, ready=true, initialLoad=false
+[Nostr 2025-02-12T15:27:17.178Z] Using existing rx-nostr instance
+[Nostr 2025-02-12T15:27:17.178Z] Metadata load skipped: rxInstance=true, ready=true, initialLoad=false
+[Nostr 2025-02-12T15:27:17.190Z] Metadata load skipped: rxInstance=true, ready=true, initialLoad=false
+[Nostr 2025-02-12T15:27:17.191Z] Metadata load skipped: rxInstance=true, ready=true, initialLoad=false
