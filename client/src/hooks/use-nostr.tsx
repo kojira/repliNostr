@@ -25,7 +25,7 @@ export function useNostr() {
       const user: User = await userRes.json();
 
       console.log("Creating Nostr event for user:", user.username);
-      console.log("User's relays:", user.relays);
+      console.log("User's relays:", JSON.stringify(user.relays, null, 2));
 
       // Create the Nostr event
       const event = {
@@ -66,13 +66,17 @@ export function useNostr() {
 
       try {
         // Connect to relays first
-        const relayConnections = relayUrls.map(url => pool.ensureRelay(url));
-        await Promise.all(relayConnections);
-        console.log("Connected to relays successfully");
+        const relayConnections = relayUrls.map(url => {
+          console.log(`Attempting to connect to relay: ${url}`);
+          return pool.ensureRelay(url);
+        });
+
+        const connectedRelays = await Promise.all(relayConnections);
+        console.log("Connected relays:", connectedRelays.map(relay => relay.url));
 
         // Publish to all configured relays
+        console.log("Publishing event to relays...");
         const pubs = pool.publish(relayUrls, signedEvent);
-        console.log("Publishing to relays...");
 
         // Wait for at least one successful publish with timeout
         const timeout = new Promise((_, reject) => 
