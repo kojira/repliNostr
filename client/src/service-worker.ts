@@ -2,14 +2,17 @@
 declare const self: ServiceWorkerGlobalScope;
 
 const CACHE_NAME = 'nostr-client-v1';
-const BASE_URL = '/repliNostr/';
+const BASE_URL = import.meta.env.VITE_BASE_URL || '/';
+
+// Remove trailing slash if present
+const normalizedBaseUrl = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL;
 
 // Prepend base URL to paths
 const STATIC_ASSETS = [
-  BASE_URL,
-  `${BASE_URL}index.html`,
-  `${BASE_URL}src/main.tsx`,
-  `${BASE_URL}src/index.css`
+  normalizedBaseUrl + '/',
+  `${normalizedBaseUrl}/index.html`,
+  `${normalizedBaseUrl}/assets/index.js`,
+  `${normalizedBaseUrl}/assets/index.css`
 ];
 
 self.addEventListener('install', (event) => {
@@ -39,7 +42,10 @@ self.addEventListener('fetch', (event) => {
 
         const responseToCache = response.clone();
         caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
+          // Normalize the URL before caching
+          const url = new URL(event.request.url);
+          const cacheKey = new Request(url.pathname, event.request);
+          cache.put(cacheKey, responseToCache);
         });
 
         return response;

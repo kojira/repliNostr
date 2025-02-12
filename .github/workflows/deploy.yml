@@ -35,6 +35,7 @@ jobs:
           cp -r ./dist/public/* ./public/
         env:
           VITE_BASE_URL: /repliNostr/
+          VITE_ASSET_URL: /repliNostr/
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
