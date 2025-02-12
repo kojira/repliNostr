@@ -1,95 +1,139 @@
-import { createContext, ReactNode, useContext } from "react";
-import {
-  useQuery,
-  useMutation,
-  UseMutationResult,
-} from "@tanstack/react-query";
-import { insertUserSchema, User as SelectUser, InsertUser } from "@shared/schema";
-import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
+import { createContext, ReactNode, useContext, useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import * as secp from '@noble/secp256k1';
+import { utils } from 'nostr-tools';
 
-type AuthContextType = {
-  user: SelectUser | null;
-  isLoading: boolean;
-  error: Error | null;
-  loginMutation: UseMutationResult<SelectUser, Error, LoginData>;
-  logoutMutation: UseMutationResult<void, Error, void>;
-  registerMutation: UseMutationResult<SelectUser, Error, InsertUser>;
+// Define types for Nostr window object
+declare global {
+  interface Window {
+    nostr?: {
+      getPublicKey(): Promise<string>;
+      signEvent(event: any): Promise<any>;
+    };
+  }
+}
+
+type NostrUser = {
+  type: "extension" | "generated";
+  publicKey: string;
+  privateKey?: string; // Only present for generated keys
 };
 
-type LoginData = Pick<InsertUser, "username" | "password">;
+type AuthContextType = {
+  user: NostrUser | null;
+  isLoading: boolean;
+  error: Error | null;
+  loginWithExtension: () => Promise<void>;
+  generateNewKeys: () => Promise<void>;
+  logout: () => void;
+};
 
 export const AuthContext = createContext<AuthContextType | null>(null);
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
-  const {
-    data: user,
-    error,
-    isLoading,
-  } = useQuery<SelectUser | undefined, Error>({
-    queryKey: ["/api/user"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
-  });
+  const [user, setUser] = useState<NostrUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
-  const loginMutation = useMutation({
-    mutationFn: async (credentials: LoginData) => {
-      const res = await apiRequest("POST", "/api/login", credentials);
-      return await res.json();
-    },
-    onSuccess: (user: SelectUser) => {
-      queryClient.setQueryData(["/api/user"], user);
-    },
-    onError: (error: Error) => {
+  // Initialize from localStorage
+  useEffect(() => {
+    const storedAuth = localStorage.getItem("nostr_auth");
+    if (storedAuth) {
+      try {
+        const parsed = JSON.parse(storedAuth);
+        setUser(parsed);
+      } catch (e) {
+        console.error("Failed to parse stored auth:", e);
+      }
+    }
+    setIsLoading(false);
+  }, []);
+
+  const loginWithExtension = async () => {
+    try {
+      setIsLoading(true);
+      if (!window.nostr) {
+        throw new Error("No Nostr extension found. Please install a Nostr extension.");
+      }
+
+      const publicKey = await window.nostr.getPublicKey();
+      const user: NostrUser = {
+        type: "extension",
+        publicKey
+      };
+
+      setUser(user);
+      localStorage.setItem("nostr_auth", JSON.stringify(user));
+
       toast({
-        title: "Login failed",
+        title: "Login Successful",
+        description: "Connected with Nostr extension",
+      });
+    } catch (e) {
+      const error = e as Error;
+      setError(error);
+      toast({
+        title: "Login Failed",
         description: error.message,
         variant: "destructive",
       });
-    },
-  });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  const registerMutation = useMutation({
-    mutationFn: async (credentials: InsertUser) => {
-      const res = await apiRequest("POST", "/api/register", credentials);
-      return await res.json();
-    },
-    onSuccess: (user: SelectUser) => {
-      queryClient.setQueryData(["/api/user"], user);
-    },
-    onError: (error: Error) => {
+  const generateNewKeys = async () => {
+    try {
+      setIsLoading(true);
+      const privateKeyBytes = utils.randomBytes(32);
+      const privateKey = utils.bytesToHex(privateKeyBytes);
+      const publicKey = utils.bytesToHex(secp.schnorr.getPublicKey(privateKeyBytes));
+
+      const user: NostrUser = {
+        type: "generated",
+        publicKey,
+        privateKey
+      };
+
+      setUser(user);
+      localStorage.setItem("nostr_auth", JSON.stringify(user));
+
       toast({
-        title: "Registration failed",
+        title: "Keys Generated",
+        description: "New Nostr keys have been generated. Please save your private key securely!",
+      });
+    } catch (e) {
+      const error = e as Error;
+      setError(error);
+      toast({
+        title: "Key Generation Failed",
         description: error.message,
         variant: "destructive",
       });
-    },
-  });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/logout");
-    },
-    onSuccess: () => {
-      queryClient.setQueryData(["/api/user"], null);
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Logout failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem("nostr_auth");
+    toast({
+      title: "Logged Out",
+      description: "Successfully logged out",
+    });
+  };
 
   return (
     <AuthContext.Provider
       value={{
-        user: user ?? null,
+        user,
         isLoading,
         error,
-        loginMutation,
-        logoutMutation,
-        registerMutation,
+        loginWithExtension,
+        generateNewKeys,
+        logout,
       }}
     >
       {children}
