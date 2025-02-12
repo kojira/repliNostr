@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -92,10 +92,7 @@ export default function RelaySettings({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>リレー設定</CardTitle>
-      </CardHeader>
-      <CardContent>
+      <CardContent className="pt-6">
         <div className="space-y-4">
           <div className="flex gap-2">
             <Input
