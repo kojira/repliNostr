@@ -8,15 +8,22 @@ import { bytesToHex } from '@noble/hashes/utils';
 import { useEffect, useRef, useState } from "react";
 import type { RxNostr } from 'rx-nostr';
 
+interface UserMetadata {
+  name?: string;
+  picture?: string;
+  about?: string;
+}
+
 export function useNostr() {
   const { toast } = useToast();
   const rxRef = useRef<RxNostr | null>(null);
   const [posts, setPosts] = useState<Map<string, Post>>(new Map());
+  const [userMetadata, setUserMetadata] = useState<Map<string, UserMetadata>>(new Map());
 
   // Initialize rx-nostr on mount
   useEffect(() => {
     rxRef.current = createRxNostr({
-      verifier // 必須のverifierを設定
+      verifier
     });
     return () => {
       if (rxRef.current) {
@@ -36,6 +43,64 @@ export function useNostr() {
       return cachedPosts;
     },
   });
+
+  // Function to fetch user metadata
+  const fetchUserMetadata = async (pubkey: string) => {
+    if (!rxRef.current || userMetadata.has(pubkey)) return;
+
+    try {
+      // Get the current user and their relay settings
+      const userRes = await apiRequest("GET", "/api/user");
+      const user: User = await userRes.json();
+
+      // Get read-enabled relay URLs
+      const readRelays = user.relays
+        .filter(relay => relay.read)
+        .map(relay => relay.url);
+
+      if (readRelays.length === 0) {
+        throw new Error("No read-enabled relays configured");
+      }
+
+      // Set default relays for this query
+      rxRef.current.setDefaultRelays(readRelays);
+
+      // Create filter for kind 0 (metadata) events
+      const filter = {
+        kinds: [0],
+        authors: [pubkey],
+        limit: 1
+      };
+
+      const rxReq = createRxForwardReq();
+
+      // Subscribe to metadata events
+      rxRef.current
+        .use(rxReq)
+        .subscribe({
+          next: ({ event }) => {
+            try {
+              const metadata = JSON.parse(event.content) as UserMetadata;
+              setUserMetadata(current => {
+                const updated = new Map(current);
+                updated.set(pubkey, metadata);
+                return updated;
+              });
+            } catch (error) {
+              console.error("Failed to parse user metadata:", error);
+            }
+          },
+          error: (error) => {
+            console.error("Error receiving metadata:", error);
+          }
+        });
+
+      // Emit filter to start subscription
+      rxReq.emit(filter);
+    } catch (error) {
+      console.error("Failed to fetch user metadata:", error);
+    }
+  };
 
   // Subscribe to new posts from relays
   useEffect(() => {
@@ -84,6 +149,9 @@ export function useNostr() {
                 }
 
                 console.log("Adding new event:", event.id);
+
+                // Fetch user metadata if not already cached
+                fetchUserMetadata(event.pubkey);
 
                 // Create a temporary post object
                 const newPost: Post = {
@@ -291,5 +359,11 @@ export function useNostr() {
     isCreatingPost: createPostMutation.isPending,
     updateProfile: updateProfileMutation.mutate,
     isUpdatingProfile: updateProfileMutation.isPending,
+    getUserMetadata: (pubkey: string) => {
+      if (!userMetadata.has(pubkey)) {
+        fetchUserMetadata(pubkey);
+      }
+      return userMetadata.get(pubkey);
+    }
   };
 }
