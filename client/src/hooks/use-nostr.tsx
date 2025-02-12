@@ -211,13 +211,17 @@ export function useNostr() {
   // メタデータ取得の最適化されたインターフェース
   const loadPostMetadata = useCallback((pubkey: string) => {
     if (!globalRxInstance || !isSubscriptionReady || !isInitialLoadComplete) {
+      debugLog(`Metadata load skipped: rxInstance=${!!globalRxInstance}, ready=${isSubscriptionReady}, initialLoad=${isInitialLoadComplete}`);
       return;
     }
+
+    debugLog(`Attempting to load metadata for pubkey: ${pubkey}`);
 
     // メモリキャッシュをチェック
     const memCached = metadataMemoryCache.get(pubkey);
     if (memCached && (Date.now() - memCached.timestamp < CACHE_TTL)) {
       if (!memCached.error) {
+        debugLog(`Using cached metadata for ${pubkey}:`, memCached.data);
         setUserMetadata(current => {
           if (!current.has(pubkey)) {
             const updated = new Map(current);
@@ -234,10 +238,12 @@ export function useNostr() {
     const lastRequest = metadataRequestTimes.get(pubkey) || 0;
     const now = Date.now();
     if (now - lastRequest < METADATA_REQUEST_INTERVAL) {
+      debugLog(`Skipping request for ${pubkey} due to rate limiting`);
       return;
     }
 
     if (!pendingMetadataRequests.current.has(pubkey) && !metadataUpdateQueue.current.has(pubkey)) {
+      debugLog(`Adding ${pubkey} to metadata update queue`);
       metadataUpdateQueue.current.add(pubkey);
       metadataRequestTimes.set(pubkey, now);
 
@@ -248,7 +254,10 @@ export function useNostr() {
     }
   }, [isSubscriptionReady, processBatchMetadataUpdate]);
 
+  // イベントとキャッシュの更新
   const updatePostsAndCache = useCallback((event: any, post: Post) => {
+    debugLog(`Processing event: ${event.id} from ${event.pubkey}`);
+
     eventsMemoryCache.set(event.id, {
       data: post,
       timestamp: Date.now()
@@ -262,7 +271,10 @@ export function useNostr() {
 
     // メタデータ取得を試みる（初期ロード完了後のみ）
     if (isInitialLoadComplete) {
+      debugLog(`Initial load complete, requesting metadata for ${event.pubkey}`);
       loadPostMetadata(event.pubkey);
+    } else {
+      debugLog(`Initial load not complete, skipping metadata for ${event.pubkey}`);
     }
   }, [loadPostMetadata]);
 
@@ -322,6 +334,7 @@ export function useNostr() {
   // rx-nostrの初期化
   useEffect(() => {
     if (globalInitialized) {
+      debugLog("Using existing rx-nostr instance");
       setInitialized(true);
       setIsSubscriptionReady(true);
       return;
@@ -329,10 +342,12 @@ export function useNostr() {
 
     const initializeNostr = async () => {
       try {
+        debugLog("Starting rx-nostr initialization");
         if (!globalRxInstance) {
           globalRxInstance = createRxNostr({ verifier });
           globalRxInstance.setDefaultRelays(DEFAULT_RELAYS);
           globalInitialized = true;
+          debugLog("Created new rx-nostr instance");
         }
         setInitialized(true);
 
@@ -342,6 +357,7 @@ export function useNostr() {
             return;
           }
 
+          debugLog(`New event received: ${event.id}`);
           seenEvents.current.add(event.id);
 
           const post: Post = {
@@ -363,6 +379,8 @@ export function useNostr() {
 
         // 継続的なサブスクリプションと初期フェッチをセットアップ
         const setupSubscriptions = () => {
+          debugLog("Setting up subscriptions");
+
           // 過去のイベントを取得
           const initialFilter = {
             kinds: [1],
@@ -376,6 +394,7 @@ export function useNostr() {
             .subscribe({
               next: ({ event }) => processEvent(event),
               error: (error) => {
+                debugLog("Initial fetch error:", error);
                 toast({
                   title: "エラー",
                   description: "初期データの取得に失敗しました",
@@ -383,7 +402,16 @@ export function useNostr() {
                 });
               },
               complete: () => {
+                debugLog("Initial fetch completed, setting isInitialLoadComplete to true");
                 isInitialLoadComplete = true;
+                // 初期ロード完了後、表示されている全投稿のメタデータを取得
+                setPosts(currentPosts => {
+                  const uniquePubkeys = new Set<string>();
+                  currentPosts.forEach(post => uniquePubkeys.add(post.pubkey));
+                  debugLog(`Requesting metadata for ${uniquePubkeys.size} unique pubkeys after initial load`);
+                  uniquePubkeys.forEach(pubkey => loadPostMetadata(pubkey));
+                  return currentPosts;
+                });
               }
             });
 
@@ -393,6 +421,7 @@ export function useNostr() {
             since: Math.floor(Date.now() / 1000)
           };
 
+          debugLog("Setting up continuous subscription");
           const rxReqContinuous = createRxForwardReq();
           const continuousSubscription = globalRxInstance!
             .use(rxReqContinuous)
@@ -416,11 +445,13 @@ export function useNostr() {
 
         // サブスクリプションの準備が整ったことを通知
         setIsSubscriptionReady(true);
+        debugLog("Subscription ready, starting setup");
 
         // サブスクリプションを開始
         return setupSubscriptions();
 
       } catch (error) {
+        debugLog("Error during initialization:", error);
         toast({
           title: "エラー",
           description: "初期化に失敗しました",
@@ -430,7 +461,7 @@ export function useNostr() {
     };
 
     initializeNostr();
-  }, [debugLog, toast, updatePostsAndCache]);
+  }, [debugLog, toast, updatePostsAndCache, loadPostMetadata]);
 
   return {
     posts: Array.from(posts.values()).sort((a, b) =>
