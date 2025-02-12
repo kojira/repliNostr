@@ -7,6 +7,27 @@ import { bytesToHex } from '@noble/hashes/utils';
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { RxNostr } from 'rx-nostr';
 
+const METADATA_CACHE_KEY = 'nostr_metadata_cache';
+const METADATA_TIMESTAMP_KEY = 'nostr_metadata_timestamp';
+const EVENTS_CACHE_KEY = 'nostr_events_cache';
+const EVENTS_TIMESTAMP_KEY = 'nostr_events_timestamp';
+const CACHE_TTL = 1000 * 60 * 60 * 3; // 3時間
+const EVENTS_CACHE_TTL = 1000 * 60 * 5; // 5分
+const MAX_CACHED_METADATA = 1000;
+const MAX_CACHED_EVENTS = 100;
+const METADATA_BATCH_SIZE = 10; // 一度に処理するメタデータの数
+const METADATA_REQUEST_INTERVAL = 1000; // メタデータリクエスト間隔（ミリ秒）
+const MAX_RETRIES = 3; // 最大リトライ回数
+
+// メモリ内キャッシュ
+const metadataMemoryCache = new Map<string, { data: UserMetadata; timestamp: number; error?: string }>();
+const eventsMemoryCache = new Map<string, { data: Post; timestamp: number }>();
+const metadataRequestTimes = new Map<string, number>(); // リクエスト時刻を追跡
+
+// rx-nostrインスタンス管理（変更なし）
+let globalRxInstance: RxNostr | null = null;
+let globalInitialized = false;
+
 interface UserMetadata {
   name?: string;
   picture?: string;
@@ -18,25 +39,6 @@ const DEFAULT_RELAYS = [
   "wss://x.kojira.io",
 ];
 
-const METADATA_CACHE_KEY = 'nostr_metadata_cache';
-const METADATA_TIMESTAMP_KEY = 'nostr_metadata_timestamp';
-const EVENTS_CACHE_KEY = 'nostr_events_cache';
-const EVENTS_TIMESTAMP_KEY = 'nostr_events_timestamp';
-const CACHE_TTL = 1000 * 60 * 60 * 3; // 3時間
-const EVENTS_CACHE_TTL = 1000 * 60 * 5; // 5分
-const MAX_CACHED_METADATA = 1000;
-const MAX_CACHED_EVENTS = 100;
-const METADATA_BATCH_SIZE = 10; // 一度に処理するメタデータの数
-const METADATA_REQUEST_INTERVAL = 1000; // メタデータリクエスト間隔（ミリ秒）
-
-// メモリ内キャッシュ
-const metadataMemoryCache = new Map<string, { data: UserMetadata; timestamp: number; error?: string }>();
-const eventsMemoryCache = new Map<string, { data: Post; timestamp: number }>();
-const metadataRequestTimes = new Map<string, number>(); // リクエスト時刻を追跡
-
-// rx-nostrインスタンス管理（変更なし）
-let globalRxInstance: RxNostr | null = null;
-let globalInitialized = false;
 
 export function useNostr() {
   const { toast } = useToast();
