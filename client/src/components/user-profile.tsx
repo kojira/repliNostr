@@ -31,7 +31,6 @@ export default function UserProfile() {
     }
   };
 
-
   if (isEditing) {
     return (
       <div className="space-y-6">
@@ -74,14 +73,21 @@ export default function UserProfile() {
           {metadata?.about && (
             <p className="text-sm text-muted-foreground">{metadata.about}</p>
           )}
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => setIsEditing(true)}
-          >
-            <Edit className="mr-2 h-4 w-4" />
-            プロフィールを編集
-          </Button>
+          {user.type === "generated" && (
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setIsEditing(true)}
+            >
+              <Edit className="mr-2 h-4 w-4" />
+              プロフィールを編集
+            </Button>
+          )}
+          {user.type === "extension" && (
+            <p className="text-sm text-muted-foreground text-center">
+              NIP-07拡張機能を使用中のため、プロフィール編集は拡張機能から行ってください。
+            </p>
+          )}
         </CardContent>
       </Card>
       <RelaySettings

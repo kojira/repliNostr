@@ -6,20 +6,40 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2 } from "lucide-react";
 import { useNostr } from "@/hooks/use-nostr";
+import { useAuth } from "@/hooks/use-auth";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface ProfileEditorProps {
   onClose?: () => void;
 }
 
 export default function ProfileEditor({ onClose }: ProfileEditorProps) {
+  const { user } = useAuth();
   const { updateProfile, isUpdatingProfile } = useNostr();
   const [name, setName] = useState("");
   const [about, setAbout] = useState("");
   const [picture, setPicture] = useState("");
 
+  if (user?.type === "extension") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>プロフィール編集</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Alert>
+            <AlertDescription>
+              NIP-07拡張機能を使用中のため、プロフィール編集は拡張機能から行ってください。
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const profile = {
       ...(name && { name }),
       ...(about && { about }),
@@ -50,7 +70,7 @@ export default function ProfileEditor({ onClose }: ProfileEditorProps) {
               placeholder="あなたの名前"
             />
           </div>
-          
+
           <div className="space-y-2">
             <Label htmlFor="about">自己紹介</Label>
             <Textarea
@@ -61,7 +81,7 @@ export default function ProfileEditor({ onClose }: ProfileEditorProps) {
               className="min-h-[100px]"
             />
           </div>
-          
+
           <div className="space-y-2">
             <Label htmlFor="picture">プロフィール画像URL</Label>
             <Input
