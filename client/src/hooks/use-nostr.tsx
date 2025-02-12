@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Post, User } from "@shared/schema";
 import { useToast } from "./use-toast";
-import { SimplePool, getPublicKey, getEventHash } from 'nostr-tools';
+import { SimplePool, getPublicKey, getEventHash, finalizeEvent } from 'nostr-tools';
 import * as secp from '@noble/secp256k1';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 
@@ -28,12 +28,11 @@ export function useNostr() {
       console.log("User's relays:", JSON.stringify(user.relays, null, 2));
 
       try {
-        // Convert private key and get public key
-        const privateKeyBytes = hexToBytes(user.privateKey);
+        // Get public key from private key
         const pubkeyHex = getPublicKey(user.privateKey);
         console.log("Public key (hex):", pubkeyHex);
 
-        // Create the Nostr event
+        // Create the unsigned event
         const event = {
           kind: 1,
           created_at: Math.floor(Date.now() / 1000),
@@ -42,16 +41,20 @@ export function useNostr() {
           pubkey: pubkeyHex
         };
 
-        console.log("Created unsigned event:", JSON.stringify(event, null, 2));
-
-        // Calculate the event hash (id)
+        // Calculate the event hash
         const id = getEventHash(event);
         console.log("Event hash generated:", id);
 
         try {
-          // Sign the event using schnorr signature
-          const signature = await secp.schnorr.sign(hexToBytes(id), privateKeyBytes);
+          // Convert private key and message to bytes
+          const privateKeyBytes = hexToBytes(user.privateKey);
+          const messageBytes = hexToBytes(id);
+
+          // Sign the event hash
+          console.log("Attempting to sign event...");
+          const signature = await secp.schnorr.sign(messageBytes, privateKeyBytes);
           const signatureHex = bytesToHex(signature);
+          console.log("Event signed successfully");
 
           // Create the complete signed event
           const signedEvent = {
@@ -59,6 +62,19 @@ export function useNostr() {
             id,
             sig: signatureHex
           };
+
+          // Verify the signature
+          console.log("Verifying signature...");
+          const isValid = await secp.schnorr.verify(
+            messageBytes,
+            pubkeyHex,
+            signatureHex
+          );
+
+          if (!isValid) {
+            throw new Error("Signature verification failed");
+          }
+          console.log("Signature verified successfully");
 
           console.log("Complete signed event:", JSON.stringify(signedEvent, null, 2));
 
@@ -72,7 +88,7 @@ export function useNostr() {
 
           console.log("Attempting to connect to relays:", relayUrls);
 
-          // Connect to relays first
+          // Connect to relays
           const relayConnections = await Promise.allSettled(
             relayUrls.map(async (url) => {
               console.log(`Connecting to relay: ${url}`);
@@ -140,10 +156,6 @@ export function useNostr() {
       } catch (error) {
         console.error("Failed to publish to Nostr relays:", error);
         throw new Error(error instanceof Error ? error.message : "Failed to publish to Nostr relays");
-      } finally {
-        if (typeof pool !== 'undefined') {
-          pool.close(relayUrls);
-        }
       }
     },
     onSuccess: () => {
