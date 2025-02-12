@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Post, User } from "@shared/schema";
 import { useToast } from "./use-toast";
-import { SimplePool, getPublicKey, getEventHash } from 'nostr-tools';
+import { SimplePool, getPublicKey, getEventHash, nip19 } from 'nostr-tools';
 import * as secp from '@noble/secp256k1';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 
@@ -68,38 +68,55 @@ export function useNostr() {
           throw new Error("Failed to connect to any relays");
         }
 
+        const privateKeyBytes = hexToBytes(user.privateKey);
+        const pubkeyHex = getPublicKey(user.privateKey);
+        console.log("Private key (hex):", user.privateKey);
+        console.log("Public key (hex):", pubkeyHex);
+
         // Create the Nostr event
         const event = {
           kind: 1,
           created_at: Math.floor(Date.now() / 1000),
           tags: [],
           content: content,
-          pubkey: getPublicKey(user.privateKey)
+          pubkey: pubkeyHex
         };
+
+        console.log("Created unsigned event:", JSON.stringify(event, null, 2));
 
         // Calculate the event hash (id)
         const id = getEventHash(event);
         console.log("Event hash generated:", id);
 
         // Sign the event
-        const eventHash = hexToBytes(id);
-        const privateKeyBytes = hexToBytes(user.privateKey);
-        const signature = await secp.signSync(eventHash, privateKeyBytes);
+        const signature = await secp.schnorr.sign(hexToBytes(id), privateKeyBytes);
+        const signatureHex = bytesToHex(signature);
 
         // Create the complete signed event
         const signedEvent = {
           ...event,
           id,
-          sig: bytesToHex(signature)
+          sig: signatureHex
         };
 
-        console.log("Publishing signed event:", signedEvent);
+        console.log("Publishing signed event:", JSON.stringify(signedEvent, null, 2));
 
         // Publish to connected relays
         const activeRelayUrls = connectedRelays.map(relay => relay.url);
         console.log("Publishing to relays:", activeRelayUrls);
 
-        const pubs = pool.publish(activeRelayUrls, signedEvent);
+        // Publish to each relay individually and log results
+        const publishPromises = activeRelayUrls.map(async (url) => {
+          try {
+            console.log(`Attempting to publish to relay: ${url}`);
+            const result = await pool.publish([url], signedEvent);
+            console.log(`Publish result for ${url}:`, result);
+            return result;
+          } catch (error) {
+            console.error(`Failed to publish to relay ${url}:`, error);
+            throw error;
+          }
+        });
 
         // Wait for at least one successful publish with timeout
         const timeout = new Promise((_, reject) => 
@@ -107,7 +124,7 @@ export function useNostr() {
         );
 
         const results = await Promise.race([
-          Promise.any(pubs).then(result => {
+          Promise.any(publishPromises).then(result => {
             console.log("Successfully published to at least one relay:", result);
             return result;
           }),
