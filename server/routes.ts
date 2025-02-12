@@ -4,6 +4,14 @@ import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { insertPostSchema, relaySchema } from "@shared/schema";
 import { log } from "./vite";
+import { z } from "zod";
+
+// プロフィール更新のためのスキーマ
+const updateProfileSchema = z.object({
+  name: z.string().optional(),
+  about: z.string().optional(),
+  picture: z.string().url("Invalid profile picture URL").optional(),
+});
 
 export function registerRoutes(app: Express): Server {
   // Add debug middleware
@@ -13,6 +21,28 @@ export function registerRoutes(app: Express): Server {
   });
 
   setupAuth(app);
+
+  // Profile update endpoint
+  app.post("/api/profile", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    try {
+      log(`[Profile] Updating profile for user: ${req.user.username}`);
+      const profile = updateProfileSchema.parse(req.body);
+
+      const updated = await storage.updateUserProfile(req.user.id, profile);
+      if (!updated) {
+        log(`[Profile] Failed to update profile for user: ${req.user.username}`);
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      log(`[Profile] Successfully updated profile for user: ${req.user.username}`);
+      res.json({ success: true, profile });
+    } catch (error) {
+      log(`[Profile] Error updating profile: ${error}`);
+      res.status(400).json({ error: "Invalid profile data" });
+    }
+  });
 
   // Posts
   app.post("/api/posts", async (req, res) => {

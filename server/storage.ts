@@ -12,6 +12,7 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUserProfile(userId: number, profile: { name?: string; about?: string; picture?: string }): Promise<boolean>;
   updateUserRelays(userId: number, relays: Relay[]): Promise<boolean>;
   getPosts(): Promise<Post[]>;
   createPost(content: string, userId: number): Promise<Post>;
@@ -24,7 +25,7 @@ export class DatabaseStorage implements IStorage {
   constructor() {
     this.sessionStore = new PostgresSessionStore({
       pool,
-      tableName: 'session'  // 明示的にテーブル名を指定
+      tableName: 'session'
     });
   }
 
@@ -47,6 +48,15 @@ export class DatabaseStorage implements IStorage {
       .values({ ...insertUser, following: [], relays: [] })
       .returning();
     return user;
+  }
+
+  async updateUserProfile(userId: number, profile: { name?: string; about?: string; picture?: string }): Promise<boolean> {
+    const [user] = await db
+      .update(users)
+      .set(profile)
+      .where(eq(users.id, userId))
+      .returning();
+    return !!user;
   }
 
   async updateUserRelays(userId: number, relays: Relay[]): Promise<boolean> {
