@@ -29,6 +29,9 @@ export function useNostr() {
   const rxRef = useRef<RxNostr | null>(null);
   const [posts, setPosts] = useState<Map<string, Post>>(new Map());
   const [userMetadata, setUserMetadata] = useState<Map<string, UserMetadata>>(new Map());
+  const pendingMetadataRequests = useRef<Set<string>>(new Set());
+  const metadataUpdateQueue = useRef<Set<string>>(new Set());
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load cached metadata on mount
   useEffect(() => {
@@ -78,15 +81,54 @@ export function useNostr() {
     };
   }, []);
 
-  // Function to fetch user metadata from relays
-  const fetchUserMetadata = async (pubkey: string) => {
-    if (!rxRef.current) return;
+  // バッチ処理でメタデータを更新
+  const processBatchMetadataUpdate = () => {
+    if (!rxRef.current || metadataUpdateQueue.current.size === 0) return;
 
-    // Return cached metadata if available
-    const cached = userMetadata.get(pubkey);
-    if (cached) {
-      return;
-    }
+    const pubkeys = Array.from(metadataUpdateQueue.current);
+    metadataUpdateQueue.current.clear();
+
+    const filter = {
+      kinds: [0],
+      authors: pubkeys,
+      limit: pubkeys.length
+    };
+
+    const rxReq = createRxForwardReq();
+
+    rxRef.current
+      .use(rxReq)
+      .subscribe({
+        next: ({ event }) => {
+          try {
+            const metadata = JSON.parse(event.content) as UserMetadata;
+            setUserMetadata(current => {
+              const updated = new Map(current);
+              updated.set(event.pubkey, {
+                name: metadata.name || `nostr:${event.pubkey.slice(0, 8)}`,
+                picture: metadata.picture,
+                about: metadata.about
+              });
+              return updated;
+            });
+          } catch (error) {
+            console.error(`Failed to parse metadata for ${event.pubkey}:`, error);
+          }
+        },
+        error: (error) => {
+          console.error("Error receiving metadata:", error);
+        }
+      });
+
+    rxReq.emit(filter);
+  };
+
+  // メタデータの更新をキューに追加
+  const queueMetadataUpdate = (pubkey: string) => {
+    if (!rxRef.current || userMetadata.has(pubkey) || pendingMetadataRequests.current.has(pubkey)) return;
+
+    metadataUpdateQueue.current.add(pubkey);
+    pendingMetadataRequests.current.add(pubkey);
 
     // Set initial placeholder
     setUserMetadata(current => {
@@ -97,53 +139,16 @@ export function useNostr() {
       return updated;
     });
 
-    try {
-      const filter = {
-        kinds: [0],
-        authors: [pubkey],
-        limit: 1
-      };
-
-      const rxReq = createRxForwardReq();
-
-      // Set timeout for metadata request
-      const timeoutId = setTimeout(() => {
-        console.log(`Metadata request timeout for pubkey: ${pubkey}`);
-      }, 5000);
-
-      // Subscribe to metadata events
-      rxRef.current
-        .use(rxReq)
-        .subscribe({
-          next: ({ event }) => {
-            clearTimeout(timeoutId);
-            try {
-              const metadata = JSON.parse(event.content) as UserMetadata;
-              console.log(`Received metadata for ${pubkey}:`, metadata);
-              setUserMetadata(current => {
-                const updated = new Map(current);
-                updated.set(pubkey, {
-                  name: metadata.name || `nostr:${pubkey.slice(0, 8)}`,
-                  picture: metadata.picture,
-                  about: metadata.about
-                });
-                return updated;
-              });
-            } catch (error) {
-              console.error(`Failed to parse metadata for ${pubkey}:`, error);
-            }
-          },
-          error: (error) => {
-            clearTimeout(timeoutId);
-            console.error(`Error receiving metadata for ${pubkey}:`, error);
-          }
-        });
-
-      // Emit filter to start subscription
-      rxReq.emit(filter);
-    } catch (error) {
-      console.error(`Failed to fetch metadata for ${pubkey}:`, error);
+    // Clear existing timeout
+    if (updateTimeoutRef.current) {
+      clearTimeout(updateTimeoutRef.current);
     }
+
+    // Set new timeout for batch processing
+    updateTimeoutRef.current = setTimeout(() => {
+      processBatchMetadataUpdate();
+      updateTimeoutRef.current = null;
+    }, 100); // 100ms後にバッチ処理を実行
   };
 
   // Subscribe to new posts from relays
@@ -169,9 +174,8 @@ export function useNostr() {
               setPosts(currentPosts => {
                 if (currentPosts.has(event.id)) return currentPosts;
 
-                console.log(`New post received from ${event.pubkey}`);
-                // バックグラウンドでメタデータを更新
-                fetchUserMetadata(event.pubkey);
+                // キューにメタデータ更新を追加
+                queueMetadataUpdate(event.pubkey);
 
                 // Create a temporary post object
                 const newPost: Post = {
@@ -208,16 +212,6 @@ export function useNostr() {
 
     fetchFromRelays();
   }, []);
-
-  // Fetch metadata for all unique pubkeys in posts
-  useEffect(() => {
-    const pubkeys = new Set(Array.from(posts.values()).map(post => post.pubkey));
-    pubkeys.forEach(pubkey => {
-      if (!userMetadata.has(pubkey)) {
-        fetchUserMetadata(pubkey);
-      }
-    });
-  }, [posts]);
 
   const createPostMutation = useMutation({
     mutationFn: async (event: { content: string; pubkey: string; privateKey: string }) => {
@@ -327,7 +321,7 @@ export function useNostr() {
     isUpdatingProfile: updateProfileMutation.isPending,
     getUserMetadata: (pubkey: string) => {
       if (!userMetadata.has(pubkey)) {
-        fetchUserMetadata(pubkey);
+        queueMetadataUpdate(pubkey);
       }
       return userMetadata.get(pubkey);
     }
