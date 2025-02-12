@@ -5,12 +5,13 @@ import { useToast } from "./use-toast";
 import { createRxNostr, createRxForwardReq } from 'rx-nostr';
 import { verifier } from 'rx-nostr-crypto';
 import { bytesToHex } from '@noble/hashes/utils';
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RxNostr } from 'rx-nostr';
 
 export function useNostr() {
   const { toast } = useToast();
   const rxRef = useRef<RxNostr | null>(null);
+  const [posts, setPosts] = useState<Map<string, Post>>(new Map());
 
   // Initialize rx-nostr on mount
   useEffect(() => {
@@ -24,29 +25,39 @@ export function useNostr() {
     };
   }, []);
 
+  // Load cached posts from database
   const postsQuery = useQuery<Post[]>({
     queryKey: ["/api/posts"],
     queryFn: async () => {
-      // Get the current user and their relay settings
-      const userRes = await apiRequest("GET", "/api/user");
-      const user: User = await userRes.json();
+      const res = await apiRequest("GET", "/api/posts");
+      const cachedPosts = await res.json();
+      // Update posts Map with cached data
+      setPosts(new Map(cachedPosts.map(post => [post.nostrEventId, post])));
+      return cachedPosts;
+    },
+  });
 
-      if (!rxRef.current) {
-        throw new Error("rx-nostr not initialized");
-      }
+  // Subscribe to new posts from relays
+  useEffect(() => {
+    if (!rxRef.current) return;
 
-      // Get read-enabled relay URLs
-      const readRelays = user.relays
-        .filter(relay => relay.read)
-        .map(relay => relay.url);
-
-      if (readRelays.length === 0) {
-        throw new Error("No read-enabled relays configured");
-      }
-
-      console.log("Fetching events from relays:", readRelays);
-
+    const fetchFromRelays = async () => {
       try {
+        // Get the current user and their relay settings
+        const userRes = await apiRequest("GET", "/api/user");
+        const user: User = await userRes.json();
+
+        // Get read-enabled relay URLs
+        const readRelays = user.relays
+          .filter(relay => relay.read)
+          .map(relay => relay.url);
+
+        if (readRelays.length === 0) {
+          throw new Error("No read-enabled relays configured");
+        }
+
+        console.log("Fetching events from relays:", readRelays);
+
         // Set default relays for this query
         rxRef.current.setDefaultRelays(readRelays);
 
@@ -56,67 +67,66 @@ export function useNostr() {
           limit: 100,
           since: Math.floor(Date.now() / 1000) - 24 * 60 * 60 // Last 24 hours
         };
-        console.log("Using filter:", filter);
 
-        // Create a promise to collect events using rxReq
-        const eventsPromise = new Promise<any[]>((resolve) => {
-          const events: any[] = [];
-          const rxReq = createRxForwardReq();
+        const rxReq = createRxForwardReq();
 
-          // Define a listener
-          const subscription = rxRef.current!
-            .use(rxReq)
-            .subscribe({
-              next: ({ event }) => {
-                events.push(event);
-              },
-              error: (error) => {
-                console.error("Error receiving events:", error);
-              }
-            });
+        // Define a listener for new events
+        rxRef.current
+          .use(rxReq)
+          .subscribe({
+            next: ({ event }) => {
+              // Add new event to posts Map if it doesn't exist
+              setPosts(currentPosts => {
+                if (currentPosts.has(event.id)) return currentPosts;
 
-          // Emit filter to start subscription
-          rxReq.emit(filter);
+                // Create a temporary post object
+                const newPost: Post = {
+                  id: 0, // This will be set by the database
+                  userId: 0, // This will be set by the database
+                  content: event.content,
+                  createdAt: new Date(event.created_at * 1000).toISOString(),
+                  nostrEventId: event.id,
+                  pubkey: event.pubkey,
+                  signature: event.sig,
+                  metadata: {
+                    tags: event.tags || [],
+                    relays: readRelays
+                  }
+                };
 
-          // Auto-complete after 5 seconds
-          setTimeout(() => {
-            subscription.unsubscribe();
-            resolve(events);
-          }, 5000);
-        });
+                // Update Map with new post
+                const updatedPosts = new Map(currentPosts);
+                updatedPosts.set(event.id, newPost);
 
-        const events = await eventsPromise;
-        console.log("Received events:", events);
+                // Asynchronously cache the event
+                apiRequest("POST", "/api/posts/cache", {
+                  id: event.id,
+                  pubkey: event.pubkey,
+                  content: event.content,
+                  sig: event.sig,
+                  tags: event.tags,
+                  relays: readRelays
+                }).catch(error => {
+                  console.error("Failed to cache event:", error);
+                });
 
-        // Cache events in the database
-        const cachePromises = events.map(async (event) => {
-          try {
-            const res = await apiRequest("POST", "/api/posts/cache", {
-              id: event.id,
-              pubkey: event.pubkey,
-              content: event.content,
-              sig: event.sig,
-              tags: event.tags,
-              relays: readRelays
-            });
-            return await res.json();
-          } catch (error) {
-            console.error("Failed to cache event:", error);
-            return null;
-          }
-        });
+                return updatedPosts;
+              });
+            },
+            error: (error) => {
+              console.error("Error receiving events:", error);
+            }
+          });
 
-        const cachedPosts = await Promise.all(cachePromises);
-        return cachedPosts.filter((post): post is Post => post !== null);
+        // Emit filter to start subscription
+        rxReq.emit(filter);
       } catch (error) {
         console.error("Failed to fetch events from relays:", error);
-        // If relay fetch fails, fall back to cached posts
-        const res = await apiRequest("GET", "/api/posts");
-        return res.json();
       }
-    },
-    staleTime: 30000, // 30 seconds
-  });
+    };
+
+    fetchFromRelays();
+  }, []);
 
   const createPostMutation = useMutation({
     mutationFn: async (content: string) => {
@@ -266,7 +276,7 @@ export function useNostr() {
   });
 
   return {
-    posts: postsQuery.data || [],
+    posts: Array.from(posts.values()),
     isLoadingPosts: postsQuery.isLoading,
     createPost: createPostMutation.mutate,
     isCreatingPost: createPostMutation.isPending,
