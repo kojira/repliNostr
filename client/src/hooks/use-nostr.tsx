@@ -46,6 +46,15 @@ export function useNostr() {
   const fetchUserMetadata = async (pubkey: string) => {
     if (!rxRef.current || userMetadata.has(pubkey)) return;
 
+    // Set initial placeholder while fetching
+    setUserMetadata(current => {
+      const updated = new Map(current);
+      if (!updated.has(pubkey)) {
+        updated.set(pubkey, { name: `nostr:${pubkey.slice(0, 8)}` });
+      }
+      return updated;
+    });
+
     try {
       // Create filter for kind 0 (metadata) events
       const filter = {
@@ -58,62 +67,45 @@ export function useNostr() {
 
       // Set timeout for metadata request
       const timeoutId = setTimeout(() => {
-        // If metadata hasn't been received, set a placeholder
-        setUserMetadata(current => {
-          if (!current.has(pubkey)) {
-            const updated = new Map(current);
-            updated.set(pubkey, { name: `nostr:${pubkey.slice(0, 8)}` });
-            return updated;
-          }
-          return current;
-        });
-      }, 5000); // 5秒のタイムアウト
+        console.log(`Metadata request timeout for pubkey: ${pubkey}`);
+        // Keep the placeholder if timeout occurs
+      }, 5000);
 
       // Subscribe to metadata events
       rxRef.current
         .use(rxReq)
         .subscribe({
           next: ({ event }) => {
-            clearTimeout(timeoutId); // Clear timeout on successful reception
+            clearTimeout(timeoutId);
             try {
               const metadata = JSON.parse(event.content) as UserMetadata;
+              console.log(`Received metadata for ${pubkey}:`, metadata);
               setUserMetadata(current => {
                 const updated = new Map(current);
-                updated.set(pubkey, metadata);
+                updated.set(pubkey, {
+                  name: metadata.name || `nostr:${pubkey.slice(0, 8)}`,
+                  picture: metadata.picture,
+                  about: metadata.about
+                });
                 return updated;
               });
             } catch (error) {
-              console.error("Failed to parse user metadata:", error);
-              // Set fallback on parse error
-              setUserMetadata(current => {
-                const updated = new Map(current);
-                updated.set(pubkey, { name: `nostr:${pubkey.slice(0, 8)}` });
-                return updated;
-              });
+              console.error(`Failed to parse metadata for ${pubkey}:`, error);
+              // Placeholder already set, no need to update
             }
           },
           error: (error) => {
-            console.error("Error receiving metadata:", error);
             clearTimeout(timeoutId);
-            // Set fallback on error
-            setUserMetadata(current => {
-              const updated = new Map(current);
-              updated.set(pubkey, { name: `nostr:${pubkey.slice(0, 8)}` });
-              return updated;
-            });
+            console.error(`Error receiving metadata for ${pubkey}:`, error);
+            // Placeholder already set, no need to update
           }
         });
 
       // Emit filter to start subscription
       rxReq.emit(filter);
     } catch (error) {
-      console.error("Failed to fetch user metadata:", error);
-      // Set fallback on error
-      setUserMetadata(current => {
-        const updated = new Map(current);
-        updated.set(pubkey, { name: `nostr:${pubkey.slice(0, 8)}` });
-        return updated;
-      });
+      console.error(`Failed to fetch metadata for ${pubkey}:`, error);
+      // Placeholder already set, no need to update
     }
   };
 
@@ -141,6 +133,7 @@ export function useNostr() {
               setPosts(currentPosts => {
                 if (currentPosts.has(event.id)) return currentPosts;
 
+                console.log(`New post received from ${event.pubkey}`);
                 // Fetch user metadata if not already cached
                 fetchUserMetadata(event.pubkey);
 
@@ -179,6 +172,16 @@ export function useNostr() {
 
     fetchFromRelays();
   }, []);
+
+  // Fetch metadata for all unique pubkeys in posts
+  useEffect(() => {
+    const pubkeys = new Set(Array.from(posts.values()).map(post => post.pubkey));
+    pubkeys.forEach(pubkey => {
+      if (!userMetadata.has(pubkey)) {
+        fetchUserMetadata(pubkey);
+      }
+    });
+  }, [posts]);
 
   const createPostMutation = useMutation({
     mutationFn: async (event: { content: string; pubkey: string; privateKey: string }) => {
