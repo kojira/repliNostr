@@ -3,7 +3,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Post, User } from "@shared/schema";
 import { useToast } from "./use-toast";
 import { SimplePool, getPublicKey, getEventHash } from 'nostr-tools';
-import * as secp256k1 from '@noble/secp256k1';
+import * as secp from '@noble/secp256k1';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 
 export function useNostr() {
@@ -84,7 +84,7 @@ export function useNostr() {
         // Sign the event
         const eventHash = hexToBytes(id);
         const privateKeyBytes = hexToBytes(user.privateKey);
-        const signature = await secp256k1.schnorr.sign(eventHash, privateKeyBytes);
+        const signature = await secp.signSync(eventHash, privateKeyBytes);
 
         // Create the complete signed event
         const signedEvent = {
