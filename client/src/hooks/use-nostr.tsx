@@ -62,7 +62,7 @@ export function useNostr() {
         const eventsPromise = new Promise<any[]>((resolve) => {
           const events: any[] = [];
           const subscription = rxRef.current!
-            .createSubscription([filter])
+            .subscribe([filter])
             .subscribe((message) => {
               if (message.type === 'event') {
                 events.push(message.event);
@@ -154,7 +154,7 @@ export function useNostr() {
         };
 
         // Publish event
-        await rxRef.current.createPublishReq(signedEvent);
+        await rxRef.current.publish(signedEvent);
 
         // Cache the event in our database
         const cacheRes = await apiRequest("POST", "/api/posts/cache", {
@@ -234,7 +234,7 @@ export function useNostr() {
         };
 
         // Publish event
-        await rxRef.current.createPublishReq(signedEvent);
+        await rxRef.current.publish(signedEvent);
 
         // Update user profile in database
         await apiRequest("POST", "/api/profile", profile);
