@@ -5,8 +5,12 @@
     <title>Page Not Found</title>
     <script>
         // GitHub Pages SPA Redirect
-        sessionStorage.redirect = window.location.href;
-        window.location.href = window.location.origin + '/repliNostr/';
+        const l = window.location;
+        const origin = l.origin;
+        const path = l.pathname.replace(/^\/[^\/]+/, '');
+        const redirectPath = origin + '/repliNostr' + path + l.search + l.hash;
+        sessionStorage.redirect = redirectPath;
+        window.location.href = origin + '/repliNostr/';
     </script>
 </head>
 <body>

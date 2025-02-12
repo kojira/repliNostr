@@ -21,7 +21,7 @@ self.addEventListener('install', (event) => {
       const urls = await Promise.all(
         STATIC_PATTERNS
           .filter(pattern => typeof pattern === 'string')
-          .map(url => cache.add(url as string))
+          .map(url => cache.add(url))
       );
       return urls;
     })
@@ -48,7 +48,7 @@ self.addEventListener('fetch', (event) => {
         const responseToCache = response.clone();
         caches.open(CACHE_NAME).then((cache) => {
           const url = new URL(event.request.url);
-          // GitHub Pagesのベースパスを考慮
+          // GitHub Pagesのベースパスを考慮してキャッシュキーを生成
           const pathname = url.pathname.startsWith(BASE_URL) 
             ? url.pathname 
             : BASE_URL + url.pathname.replace(/^\//, '');
