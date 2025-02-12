@@ -572,6 +572,89 @@ export function useNostr() {
     },
   });
 
+  // Add updateProfile mutation
+  const updateProfileMutation = useMutation({
+    mutationFn: async (metadata: { name?: string; about?: string; picture?: string }) => {
+      if (!user || !globalRxInstance) {
+        throw new Error("Not ready to update profile");
+      }
+
+      debugLog("Creating profile update event");
+      const event = {
+        kind: 0,
+        content: JSON.stringify(metadata),
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [],
+      };
+
+      debugLog("Sending signed profile update with content:", metadata);
+
+      return new Promise<void>((resolve, reject) => {
+        let successCount = 0;
+        let failureCount = 0;
+        const totalRelays = DEFAULT_RELAYS.length;
+
+        globalRxInstance!.send(event).subscribe({
+          next: (packet) => {
+            debugLog(`Relay response from ${packet.from}:`, packet);
+            if (packet.ok) {
+              debugLog(`Profile update sent successfully to ${packet.from}`);
+              successCount++;
+
+              if (successCount === 1) {
+                // Update local metadata cache
+                setUserMetadata((current) => {
+                  const updated = new Map(current);
+                  if (user) {
+                    updated.set(user.publicKey, {
+                      ...metadata,
+                    });
+                  }
+                  return updated;
+                });
+
+                // Update localStorage cache
+                if (user) {
+                  storage.updateMetadata(user.publicKey, metadata);
+                }
+
+                resolve();
+              }
+            } else {
+              debugLog(`Failed to send profile update to ${packet.from}`);
+              failureCount++;
+            }
+
+            if (successCount + failureCount === totalRelays) {
+              debugLog(`Profile update completed. Success: ${successCount}, Failed: ${failureCount}`);
+              if (successCount === 0) {
+                reject(new Error("Failed to send to all relays"));
+              }
+            }
+          },
+          error: (error) => {
+            debugLog("Error sending profile update:", error);
+            reject(error);
+          },
+        });
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "成功",
+        description: "プロフィールを更新しました",
+      });
+    },
+    onError: (error) => {
+      console.error("Error updating profile:", error);
+      toast({
+        title: "エラー",
+        description: "プロフィールの更新に失敗しました",
+        variant: "destructive",
+      });
+    },
+  });
+
   return {
     posts: Array.from(posts.values()).sort(
       (a, b) =>
@@ -585,5 +668,7 @@ export function useNostr() {
     loadPostMetadata,
     createPost: createPostMutation.mutate,
     isCreatingPost: createPostMutation.isPending,
+    updateProfile: updateProfileMutation.mutate,
+    isUpdatingProfile: updateProfileMutation.isPending,
   };
 }
