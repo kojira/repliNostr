@@ -115,16 +115,23 @@ export default function RelaySettings({
             </div>
           ) : (
             localRelays.map((relay) => (
-              <div key={relay.url} className="flex items-center gap-4 p-2 border rounded">
-                <div className="flex-1">
-                  <div className="font-medium truncate">{relay.url}</div>
-                  <div className="text-sm text-muted-foreground">
-                    ステータス: {relay.read && relay.write ? "読み書き可能" : 
-                              relay.read ? "読み取り専用" : 
-                              relay.write ? "書き込み専用" : "無効"}
-                  </div>
+              <div key={relay.url} className="flex flex-col space-y-2 p-3 border rounded">
+                <div className="flex items-center justify-between">
+                  <div className="font-medium break-all">{relay.url}</div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeRelay(relay.url)}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="text-sm text-muted-foreground">
+                  ステータス: {relay.read && relay.write ? "読み書き可能" : 
+                            relay.read ? "読み取り専用" : 
+                            relay.write ? "書き込み専用" : "無効"}
+                </div>
+                <div className="flex flex-wrap gap-4 pt-2">
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={relay.read}
@@ -139,13 +146,6 @@ export default function RelaySettings({
                     />
                     <Label>書き込み</Label>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeRelay(relay.url)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
                 </div>
               </div>
             ))
