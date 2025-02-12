@@ -4,32 +4,38 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script>
-        // Debug logging
-        console.log('Current URL:', window.location.href);
-        console.log('Origin:', window.location.origin);
-        console.log('Pathname:', window.location.pathname);
-        console.log('Base URL:', import.meta.env.VITE_BASE_URL);
-        console.log('Asset URL:', import.meta.env.VITE_ASSET_URL);
+        // Debug logging with clearer messages
+        console.log('[Debug] Environment:', {
+            currentUrl: window.location.href,
+            origin: window.location.origin,
+            pathname: window.location.pathname,
+            baseUrl: import.meta.env.VITE_BASE_URL || '/',
+            assetUrl: import.meta.env.VITE_ASSET_URL || ''
+        });
 
         // Handle GitHub Pages SPA redirect
         (function() {
-            // Only handle redirects for GitHub Pages
-            if (location.hostname.includes('github.io')) {
+            const isGitHubPages = location.hostname.includes('github.io');
+            console.log('[Debug] Is GitHub Pages:', isGitHubPages);
+
+            if (isGitHubPages) {
                 const redirect = sessionStorage.redirect;
                 if (redirect) {
                     // Clear stored redirect to prevent loops
                     delete sessionStorage.redirect;
 
                     if (redirect !== location.href) {
-                        console.log('GitHub Pages redirect from:', redirect);
+                        console.log('[Debug] Redirecting from:', redirect);
                         // Ensure path is relative to /repliNostr/
-                        const newPath = redirect.replace(location.origin, '').replace('/repliNostr/', '/');
-                        console.log('New path:', newPath);
-                        history.replaceState(null, null, import.meta.env.VITE_BASE_URL + newPath);
+                        const baseUrl = import.meta.env.VITE_BASE_URL || '/repliNostr/';
+                        const newPath = redirect.replace(location.origin, '')
+                                              .replace('/repliNostr/', '/');
+                        console.log('[Debug] New path:', newPath);
+                        history.replaceState(null, null, baseUrl + newPath);
                     }
                 }
             } else {
-                console.log('Development environment - no redirect needed');
+                console.log('[Debug] Development environment - no redirect needed');
             }
         })();
     </script>
