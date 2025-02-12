@@ -218,13 +218,6 @@ export function useNostr() {
     (event: any, post: Post) => {
       debugLog(`Processing event: ${event.id} from ${event.pubkey}`);
 
-      if (!isInitialLoadComplete.current) {
-        debugLog(
-          `Initial load not complete, skipping metadata for ${event.pubkey}`,
-        );
-        return;
-      }
-
       eventsMemoryCache.set(event.id, {
         data: post,
         timestamp: Date.now(),
@@ -235,6 +228,13 @@ export function useNostr() {
         updatedPosts.set(event.id, post);
         return updatedPosts;
       });
+
+      if (!isInitialLoadComplete.current) {
+        debugLog(
+          `Initial load not complete, skipping metadata for ${event.pubkey}`,
+        );
+        return;
+      }
 
       // キャッシュされたメタデータがあれば即座に適用
       const cachedMetadata = metadataMemoryCache.get(event.pubkey);
@@ -277,31 +277,6 @@ export function useNostr() {
         }
         setInitialized(true);
 
-        const processEvent = (event: any) => {
-          if (seenEvents.current.has(event.id)) {
-            return;
-          }
-
-          debugLog(`New event received: ${event.id}`);
-          seenEvents.current.add(event.id);
-
-          const post: Post = {
-            id: 0,
-            userId: 0,
-            content: event.content,
-            createdAt: new Date(event.created_at * 1000).toISOString(),
-            nostrEventId: event.id,
-            pubkey: event.pubkey,
-            signature: event.sig,
-            metadata: {
-              tags: event.tags || [],
-              relays: DEFAULT_RELAYS,
-            },
-          };
-
-          updatePostsAndCache(event, post);
-        };
-
         const setupSubscriptions = () => {
           debugLog("Setting up subscriptions");
 
@@ -312,10 +287,31 @@ export function useNostr() {
           };
 
           const rxReqInitial = createRxForwardReq();
+          let initialEventsReceived = 0;
+
           const initialSubscription = globalRxInstance!
             .use(rxReqInitial)
             .subscribe({
-              next: ({ event }) => processEvent(event),
+              next: ({ event }) => {
+                if (!seenEvents.current.has(event.id)) {
+                  seenEvents.current.add(event.id);
+                  const post: Post = {
+                    id: 0,
+                    userId: 0,
+                    content: event.content,
+                    createdAt: new Date(event.created_at * 1000).toISOString(),
+                    nostrEventId: event.id,
+                    pubkey: event.pubkey,
+                    signature: event.sig,
+                    metadata: {
+                      tags: event.tags || [],
+                      relays: DEFAULT_RELAYS,
+                    },
+                  };
+                  updatePostsAndCache(event, post);
+                  initialEventsReceived++;
+                }
+              },
               error: (error) => {
                 debugLog("Initial fetch error:", error);
                 toast({
@@ -325,12 +321,14 @@ export function useNostr() {
                 });
               },
               complete: () => {
-                debugLog("Initial fetch completed");
+                debugLog(`Initial fetch completed with ${initialEventsReceived} events`);
                 setIsSubscriptionReady(true);
                 subscriptionReadyRef.current = true;
                 isInitialLoadComplete.current = true;
                 // 初期ロード完了後にメタデータ取得を開始
-                processBatchMetadataUpdate();
+                processBatchMetadataUpdate().catch((error) =>
+                  debugLog("Error in initial metadata update:", error),
+                );
               },
             });
 
@@ -344,7 +342,25 @@ export function useNostr() {
           const continuousSubscription = globalRxInstance!
             .use(rxReqContinuous)
             .subscribe({
-              next: ({ event }) => processEvent(event),
+              next: ({ event }) => {
+                if (!seenEvents.current.has(event.id)) {
+                  seenEvents.current.add(event.id);
+                  const post: Post = {
+                    id: 0,
+                    userId: 0,
+                    content: event.content,
+                    createdAt: new Date(event.created_at * 1000).toISOString(),
+                    nostrEventId: event.id,
+                    pubkey: event.pubkey,
+                    signature: event.sig,
+                    metadata: {
+                      tags: event.tags || [],
+                      relays: DEFAULT_RELAYS,
+                    },
+                  };
+                  updatePostsAndCache(event, post);
+                }
+              },
               error: (error) => {
                 debugLog("Continuous subscription error:", error);
               },

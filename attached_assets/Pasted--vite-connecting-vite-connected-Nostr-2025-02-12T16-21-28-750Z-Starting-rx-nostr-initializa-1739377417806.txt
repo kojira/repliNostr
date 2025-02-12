@@ -1,0 +1,29 @@
+[vite] connecting...
+[vite] connected.
+[Nostr 2025-02-12T16:21:28.750Z] Starting rx-nostr initialization
+[Nostr 2025-02-12T16:21:28.756Z] Created new rx-nostr instance
+[Nostr 2025-02-12T16:21:28.756Z] Setting up subscriptions
+[Nostr 2025-02-12T16:21:28.756Z] Setting up continuous subscription
+[Nostr 2025-02-12T16:21:28.908Z] New event received: 70ca4abf929ac9f1a41b5ae1d83b8fa0a113ad009a38e23d27308f07a807cc23
+[Nostr 2025-02-12T16:21:28.908Z] Processing event: 70ca4abf929ac9f1a41b5ae1d83b8fa0a113ad009a38e23d27308f07a807cc23 from b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T16:21:28.908Z] Initial load not complete, skipping metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T16:21:28.911Z] New event received: 5082a1354cc90adab5d478df721a477790da53a054dac214719d035e1e97e2d4
+[Nostr 2025-02-12T16:21:28.911Z] Processing event: 5082a1354cc90adab5d478df721a477790da53a054dac214719d035e1e97e2d4 from b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T16:21:28.911Z] Initial load not complete, skipping metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T16:21:28.912Z] New event received: d895a4705f741d4b7711d143dd8f708f5ea857e6bd78472be92055381370b87e
+[Nostr 2025-02-12T16:21:28.912Z] Processing event: d895a4705f741d4b7711d143dd8f708f5ea857e6bd78472be92055381370b87e from b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T16:21:28.912Z] Initial load not complete, skipping metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T16:21:28.914Z] New event received: f433d0d4c631e3a71f51b67ac39ffd28e859cef415d1aa0f2801a2972fe72f90
+[Nostr 2025-02-12T16:21:28.914Z] Processing event: f433d0d4c631e3a71f51b67ac39ffd28e859cef415d1aa0f2801a2972fe72f90 from b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T16:21:28.914Z] Initial load not complete, skipping metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T16:21:28.916Z] New event received: 9c1f4e30d5d23cbf5c4744e6039528a671376498f464199770def24b5f5d6630
+[Nostr 2025-02-12T16:21:28.916Z] Processing event: 9c1f4e30d5d23cbf5c4744e6039528a671376498f464199770def24b5f5d6630 from b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T16:21:28.916Z] Initial load not complete, skipping metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T16:21:28.917Z] New event received: a1b0b39c44e51da69a07d1845aded1e8b295dc017fd5a1acb9dc5f5d25440bc4
+[Nostr 2025-02-12T16:21:28.917Z] Processing event: a1b0b39c44e51da69a07d1845aded1e8b295dc017fd5a1acb9dc5f5d25440bc4 from b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T16:21:28.917Z] Initial load not complete, skipping metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T16:21:28.919Z] New event received: 995f105528fdd4fc628b2b28b6af450fe4f9ecc86b99d3b9857422bdd991b1c9
+[Nostr 2025-02-12T16:21:28.919Z] Processing event: 995f105528fdd4fc628b2b28b6af450fe4f9ecc86b99d3b9857422bdd991b1c9 from b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T16:21:28.919Z] Initial load not complete, skipping metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T16:21:28.920Z] New event received: 226e994634353f9ec01a423f2596feb7bb2ffa484524b7966450c5a9093df424
+[Nostr 2025-02-12T16:21:28.920Z] Processing event: 226e994634353f9ec01a423f2596feb7bb2ffa484524b7966450c5a9093df424 from b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
