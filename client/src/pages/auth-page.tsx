@@ -9,7 +9,6 @@ import { insertUserSchema, type InsertUser } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
 import { Redirect } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { randomBytes } from "crypto";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
@@ -21,21 +20,38 @@ export default function AuthPage() {
 
   const loginForm = useForm<LoginFormData>({
     resolver: zodResolver(insertUserSchema.pick({ username: true, password: true })),
+    defaultValues: {
+      username: "",
+      password: ""
+    }
   });
 
   const registerForm = useForm<LoginFormData>({
     resolver: zodResolver(insertUserSchema.pick({ username: true, password: true })),
+    defaultValues: {
+      username: "",
+      password: ""
+    }
   });
 
   if (user) {
     return <Redirect to="/" />;
   }
 
-  const onLogin = loginForm.handleSubmit((data) => {
-    loginMutation.mutate(data);
-  });
+  const onLogin = async (data: LoginFormData) => {
+    try {
+      await loginMutation.mutateAsync(data);
+    } catch (error) {
+      console.error("Login error:", error);
+      toast({
+        title: "Login Error",
+        description: error instanceof Error ? error.message : "Failed to login",
+        variant: "destructive",
+      });
+    }
+  };
 
-  const onRegister = registerForm.handleSubmit(async (data) => {
+  const onRegister = async (data: LoginFormData) => {
     try {
       // Generate 32 bytes of random data for private key
       const privateKeyBytes = new Uint8Array(32);
@@ -45,10 +61,9 @@ export default function AuthPage() {
         .join('');
 
       // For now, use the same key for public (this is just for testing)
-      // In production, we would use proper key derivation
       const publicKey = privateKey;
 
-      registerMutation.mutate({
+      await registerMutation.mutateAsync({
         ...data,
         privateKey,
         publicKey,
@@ -57,11 +72,11 @@ export default function AuthPage() {
       console.error("Registration error:", error);
       toast({
         title: "Registration Error",
-        description: error instanceof Error ? error.message : "Failed to generate keys",
+        description: error instanceof Error ? error.message : "Failed to register",
         variant: "destructive",
       });
     }
-  });
+  };
 
   return (
     <div className="min-h-screen grid md:grid-cols-2">
@@ -79,7 +94,7 @@ export default function AuthPage() {
 
               <TabsContent value="login">
                 <Form {...loginForm}>
-                  <form onSubmit={onLogin} className="space-y-4">
+                  <form onSubmit={loginForm.handleSubmit(onLogin)} className="space-y-4">
                     <div>
                       <Label htmlFor="username">Username</Label>
                       <Input {...loginForm.register("username")} />
@@ -91,7 +106,10 @@ export default function AuthPage() {
                     </div>
                     <div>
                       <Label htmlFor="password">Password</Label>
-                      <Input type="password" {...loginForm.register("password")} />
+                      <Input 
+                        type="password" 
+                        {...loginForm.register("password")} 
+                      />
                       {loginForm.formState.errors.password && (
                         <p className="text-sm text-destructive mt-1">
                           {loginForm.formState.errors.password.message}
@@ -114,7 +132,7 @@ export default function AuthPage() {
 
               <TabsContent value="register">
                 <Form {...registerForm}>
-                  <form onSubmit={onRegister} className="space-y-4">
+                  <form onSubmit={registerForm.handleSubmit(onRegister)} className="space-y-4">
                     <div>
                       <Label htmlFor="username">Username</Label>
                       <Input {...registerForm.register("username")} />
@@ -126,7 +144,10 @@ export default function AuthPage() {
                     </div>
                     <div>
                       <Label htmlFor="password">Password</Label>
-                      <Input type="password" {...registerForm.register("password")} />
+                      <Input 
+                        type="password" 
+                        {...registerForm.register("password")} 
+                      />
                       {registerForm.formState.errors.password && (
                         <p className="text-sm text-destructive mt-1">
                           {registerForm.formState.errors.password.message}
@@ -143,6 +164,11 @@ export default function AuthPage() {
                       )}
                       Register
                     </Button>
+                    {registerForm.formState.errors.root && (
+                      <p className="text-sm text-destructive mt-1">
+                        {registerForm.formState.errors.root.message}
+                      </p>
+                    )}
                   </form>
                 </Form>
               </TabsContent>
