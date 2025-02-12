@@ -1,5 +1,4 @@
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
 import { Post } from "@shared/schema";
 import { useToast } from "./use-toast";
 import { createRxNostr, createRxForwardReq } from 'rx-nostr';
@@ -57,11 +56,25 @@ export function useNostr() {
 
       const rxReq = createRxForwardReq();
 
+      // Set timeout for metadata request
+      const timeoutId = setTimeout(() => {
+        // If metadata hasn't been received, set a placeholder
+        setUserMetadata(current => {
+          if (!current.has(pubkey)) {
+            const updated = new Map(current);
+            updated.set(pubkey, { name: `nostr:${pubkey.slice(0, 8)}` });
+            return updated;
+          }
+          return current;
+        });
+      }, 5000); // 5秒のタイムアウト
+
       // Subscribe to metadata events
       rxRef.current
         .use(rxReq)
         .subscribe({
           next: ({ event }) => {
+            clearTimeout(timeoutId); // Clear timeout on successful reception
             try {
               const metadata = JSON.parse(event.content) as UserMetadata;
               setUserMetadata(current => {
@@ -71,10 +84,23 @@ export function useNostr() {
               });
             } catch (error) {
               console.error("Failed to parse user metadata:", error);
+              // Set fallback on parse error
+              setUserMetadata(current => {
+                const updated = new Map(current);
+                updated.set(pubkey, { name: `nostr:${pubkey.slice(0, 8)}` });
+                return updated;
+              });
             }
           },
           error: (error) => {
             console.error("Error receiving metadata:", error);
+            clearTimeout(timeoutId);
+            // Set fallback on error
+            setUserMetadata(current => {
+              const updated = new Map(current);
+              updated.set(pubkey, { name: `nostr:${pubkey.slice(0, 8)}` });
+              return updated;
+            });
           }
         });
 
@@ -82,6 +108,12 @@ export function useNostr() {
       rxReq.emit(filter);
     } catch (error) {
       console.error("Failed to fetch user metadata:", error);
+      // Set fallback on error
+      setUserMetadata(current => {
+        const updated = new Map(current);
+        updated.set(pubkey, { name: `nostr:${pubkey.slice(0, 8)}` });
+        return updated;
+      });
     }
   };
 
@@ -137,17 +169,27 @@ export function useNostr() {
                 const updatedPosts = new Map(currentPosts);
                 updatedPosts.set(event.id, newPost);
 
-                // Asynchronously cache the event
-                apiRequest("POST", "/api/posts/cache", {
-                  id: event.id,
-                  pubkey: event.pubkey,
-                  content: event.content,
-                  sig: event.sig,
-                  tags: event.tags,
-                  relays: DEFAULT_RELAYS
-                }).catch(error => {
+                // Try to cache the event in the background
+                try {
+                  fetch('/api/posts/cache', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      id: event.id,
+                      pubkey: event.pubkey,
+                      content: event.content,
+                      sig: event.sig,
+                      tags: event.tags,
+                      relays: DEFAULT_RELAYS
+                    })
+                  }).catch(error => {
+                    // Ignore cache errors - they don't affect the UI
+                    console.error("Failed to cache event:", error);
+                  });
+                } catch (error) {
+                  // Ignore cache errors - they don't affect the UI
                   console.error("Failed to cache event:", error);
-                });
+                }
 
                 return updatedPosts;
               });
@@ -194,15 +236,27 @@ export function useNostr() {
         // Publish event
         await rxRef.current!.send(signedEvent);
 
-        // Cache the event in our database
-        await apiRequest("POST", "/api/posts/cache", {
-          id: signedEvent.id,
-          pubkey: signedEvent.pubkey,
-          content: signedEvent.content,
-          sig: signedEvent.sig,
-          tags: signedEvent.tags,
-          relays: DEFAULT_RELAYS
-        });
+        // Try to cache the event in the background
+        try {
+          fetch('/api/posts/cache', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: signedEvent.id,
+              pubkey: signedEvent.pubkey,
+              content: signedEvent.content,
+              sig: signedEvent.sig,
+              tags: signedEvent.tags,
+              relays: DEFAULT_RELAYS
+            })
+          }).catch(error => {
+            // Ignore cache errors - they don't affect the UI
+            console.error("Failed to cache event:", error);
+          });
+        } catch (error) {
+          // Ignore cache errors - they don't affect the UI
+          console.error("Failed to cache event:", error);
+        }
 
         return signedEvent;
       } catch (error) {
@@ -213,7 +267,7 @@ export function useNostr() {
     onSuccess: () => {
       toast({
         title: "投稿を作成しました",
-        description: "投稿はNostrリレーとデータベースに保存されました",
+        description: "投稿はNostrリレーに保存されました",
       });
     },
     onError: (error: Error) => {
