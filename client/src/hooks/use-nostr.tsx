@@ -260,7 +260,7 @@ export function useNostr() {
     loadPostMetadata(event.pubkey);
   }, [loadPostMetadata]);
 
-  // キャッシュを定期的に保存
+  // イベントキャッシュを保存
   useEffect(() => {
     const saveInterval = setInterval(() => {
       try {
@@ -309,12 +309,22 @@ export function useNostr() {
           setPosts(new Map(entries.map(([key, value]) => [key, value as Post])));
           debugLog(`Loaded ${entries.length} events from cache`);
 
-          // キャッシュされたイベントのメタデータを処理
+          // メタデータの処理を最適化
           const uniquePubkeys = new Set(entries.map(([_, post]) => (post as Post).pubkey));
           debugLog(`Processing metadata for ${uniquePubkeys.size} unique pubkeys from cache`);
-          uniquePubkeys.forEach(pubkey => {
-            loadPostMetadata(pubkey);
+
+          // すでにメタデータが存在するpubkeyを除外
+          const pubkeysToProcess = Array.from(uniquePubkeys).filter(pubkey => {
+            const memCached = metadataMemoryCache.get(pubkey);
+            return !(memCached && (Date.now() - memCached.timestamp < CACHE_TTL));
           });
+
+          if (pubkeysToProcess.length > 0) {
+            debugLog(`Requesting metadata for ${pubkeysToProcess.length} new pubkeys`);
+            pubkeysToProcess.forEach(pubkey => {
+              loadPostMetadata(pubkey);
+            });
+          }
         }
       }
     } catch (error) {
@@ -368,8 +378,9 @@ export function useNostr() {
           updatePostsAndCache(event, post);
         };
 
-        // 過去のイベントを取得
-        const fetchInitialEvents = () => {
+        // 継続的なサブスクリプションと初期フェッチをセットアップ
+        const setupSubscriptions = () => {
+          // 過去のイベントを取得
           const initialFilter = {
             kinds: [1],
             limit: 30,
@@ -378,9 +389,9 @@ export function useNostr() {
 
           debugLog("Fetching initial events with filter:", initialFilter);
 
-          const rxReq = createRxForwardReq();
-          const subscription = globalRxInstance!
-            .use(rxReq)
+          const rxReqInitial = createRxForwardReq();
+          const initialSubscription = globalRxInstance!
+            .use(rxReqInitial)
             .subscribe({
               next: ({ event }) => processEvent(event),
               error: (error) => {
@@ -392,27 +403,21 @@ export function useNostr() {
                 });
               },
               complete: () => {
-                debugLog("Initial fetch completed, setting up continuous subscription");
-                setupContinuousSubscription();
+                debugLog("Initial fetch completed");
               }
             });
 
-          rxReq.emit(initialFilter);
-          return subscription;
-        };
-
-        // 継続的なサブスクリプションを設定
-        const setupContinuousSubscription = () => {
+          // リアルタイム更新用のサブスクリプション
           const continuousFilter = {
             kinds: [1],
-            since: lastEventTimestamp.current + 1
+            since: Math.floor(Date.now() / 1000)
           };
 
           debugLog("Setting up continuous subscription with filter:", continuousFilter);
 
-          const rxReq = createRxForwardReq();
-          const subscription = globalRxInstance!
-            .use(rxReq)
+          const rxReqContinuous = createRxForwardReq();
+          const continuousSubscription = globalRxInstance!
+            .use(rxReqContinuous)
             .subscribe({
               next: ({ event }) => processEvent(event),
               error: (error) => {
@@ -420,19 +425,24 @@ export function useNostr() {
               }
             });
 
-          rxReq.emit(continuousFilter);
-          return subscription;
+          // フィルターを発行
+          rxReqInitial.emit(initialFilter);
+          rxReqContinuous.emit(continuousFilter);
+
+          return () => {
+            initialSubscription.unsubscribe();
+            continuousSubscription.unsubscribe();
+            activeSubscriptions.current.clear();
+            debugLog("Cleaned up all subscriptions");
+          };
         };
 
-        // 初期化完了後、サブスクリプションを開始
+        // サブスクリプションの準備が整ったことを通知
         setIsSubscriptionReady(true);
-        const initialSubscription = fetchInitialEvents();
 
-        return () => {
-          initialSubscription.unsubscribe();
-          activeSubscriptions.current.clear();
-          debugLog("Cleaned up all subscriptions");
-        };
+        // サブスクリプションを開始
+        return setupSubscriptions();
+
       } catch (error) {
         debugLog("Error during initialization:", error);
         toast({
