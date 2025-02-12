@@ -129,6 +129,7 @@ export function useNostr() {
                   timestamp: Date.now(),
                   error: "Metadata fetch timeout",
                 });
+                isCompleted = true;
                 resolve(undefined);
               }
             }, METADATA_TIMEOUT);
@@ -136,6 +137,8 @@ export function useNostr() {
             const subscription = globalRxInstance!.use(rxReq).subscribe({
               next: ({ event }) => {
                 try {
+                  if (isCompleted) return; // タイムアウト後のレスポンスは無視
+
                   debugLog(`Received metadata for pubkey: ${event.pubkey}`);
                   const metadata = JSON.parse(event.content) as UserMetadata;
                   const processedMetadata = {
@@ -192,6 +195,28 @@ export function useNostr() {
       isProcessingMetadata = false;
     }
   }, [debugLog, isValidCache, applyMetadataFromCache]);
+
+  // メタデータ取得の公開インターフェース
+  const loadPostMetadata = useCallback(
+    (pubkey: string) => {
+      // キャッシュをチェック
+      if (isValidCache(pubkey)) {
+        debugLog(`Using cached metadata for ${pubkey}`);
+        applyMetadataFromCache(pubkey);
+        return;
+      }
+
+      // キューに追加（重複を避ける）
+      if (!pendingMetadata.current.includes(pubkey)) {
+        pendingMetadata.current.push(pubkey);
+        // キューの処理を開始
+        processMetadataQueue().catch((error) =>
+          debugLog("Error processing metadata queue:", error),
+        );
+      }
+    },
+    [debugLog, isValidCache, applyMetadataFromCache, processMetadataQueue],
+  );
 
   // イベントとキャッシュの更新
   const updatePostsAndCache = useCallback(
@@ -411,5 +436,6 @@ export function useNostr() {
       (pubkey: string) => userMetadata.get(pubkey),
       [userMetadata],
     ),
+    loadPostMetadata, // 公開インターフェースとして復活
   };
 }
