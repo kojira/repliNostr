@@ -3,7 +3,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Post, User } from "@shared/schema";
 import { useToast } from "./use-toast";
 import { SimplePool, getPublicKey, getEventHash, finalizeEvent } from 'nostr-tools';
-import * as secp from '@noble/secp256k1';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 
 export function useNostr() {
@@ -28,54 +27,27 @@ export function useNostr() {
       console.log("User's relays:", JSON.stringify(user.relays, null, 2));
 
       try {
-        // Get public key from private key
-        const pubkeyHex = getPublicKey(user.privateKey);
-        console.log("Public key (hex):", pubkeyHex);
+        // Debug: Check private key format and length
+        console.log("Private key format check:");
+        console.log("- Length:", user.privateKey.length);
+        console.log("- Is hex:", /^[0-9a-f]+$/i.test(user.privateKey));
 
         // Create the unsigned event
-        const event = {
+        const unsignedEvent = {
           kind: 1,
           created_at: Math.floor(Date.now() / 1000),
           tags: [],
           content: content,
-          pubkey: pubkeyHex
+          pubkey: getPublicKey(user.privateKey)
         };
 
-        // Calculate the event hash
-        const id = getEventHash(event);
-        console.log("Event hash generated:", id);
+        console.log("Created unsigned event:", JSON.stringify(unsignedEvent, null, 2));
 
         try {
-          // Convert private key and message to bytes
-          const privateKeyBytes = hexToBytes(user.privateKey);
-          const messageBytes = hexToBytes(id);
-
-          // Sign the event hash
-          console.log("Attempting to sign event...");
-          const signature = await secp.schnorr.sign(messageBytes, privateKeyBytes);
-          const signatureHex = bytesToHex(signature);
+          // Finalize and sign the event using nostr-tools
+          console.log("Attempting to finalize and sign event...");
+          const signedEvent = finalizeEvent(unsignedEvent, user.privateKey);
           console.log("Event signed successfully");
-
-          // Create the complete signed event
-          const signedEvent = {
-            ...event,
-            id,
-            sig: signatureHex
-          };
-
-          // Verify the signature
-          console.log("Verifying signature...");
-          const isValid = await secp.schnorr.verify(
-            messageBytes,
-            pubkeyHex,
-            signatureHex
-          );
-
-          if (!isValid) {
-            throw new Error("Signature verification failed");
-          }
-          console.log("Signature verified successfully");
-
           console.log("Complete signed event:", JSON.stringify(signedEvent, null, 2));
 
           // Create a new pool for relays
@@ -150,8 +122,8 @@ export function useNostr() {
           // Return the created post
           return post;
         } catch (error) {
-          console.error("Failed to sign or publish event:", error);
-          throw error;
+          console.error("Failed to sign event:", error);
+          throw new Error(`Failed to sign event: ${error instanceof Error ? error.message : String(error)}`);
         }
       } catch (error) {
         console.error("Failed to publish to Nostr relays:", error);
