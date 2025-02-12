@@ -1,0 +1,51 @@
+[Nostr 2025-02-12T17:29:23.281Z] Using cached metadata for c81c7999f7276387317878e59d7c321093a433977ee6811ca76dc3a9738e1869
+[Nostr 2025-02-12T17:29:23.314Z] Using cached metadata for c81c7999f7276387317878e59d7c321093a433977ee6811ca76dc3a9738e1869
+[Nostr 2025-02-12T17:29:23.341Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:23.374Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:23.840Z] Using cached metadata for 1ae011cb34999af15602a2aa927f32bb92d65f6161ed71abdaa4f50c1257a556
+[Nostr 2025-02-12T17:29:23.887Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:23.909Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:23.938Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:23.974Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:24.514Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:24.561Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:24.583Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:24.614Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:24.656Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:25.114Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:25.149Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:25.173Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:25.189Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:25.214Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:25.248Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:25.714Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+[Nostr 2025-02-12T17:29:25.748Z] Using cached metadata for e7bf8dad360828f0289b7b4bea1a1bd28eb6d4d6522fa17f957e0dfb839ef3db
+[Nostr 2025-02-12T17:29:25.789Z] Using cached metadata for f03df3d4134230420cdf7acbb35f96a2542424246ab052ba24c6fec6a4d4f676
+[Nostr 2025-02-12T17:29:25.839Z] Using cached metadata for f03df3d4134230420cdf7acbb35f96a2542424246ab052ba24c6fec6a4d4f676
+[Nostr 2025-02-12T17:29:25.902Z] Using cached metadata for f03df3d4134230420cdf7acbb35f96a2542424246ab052ba24c6fec6a4d4f676
+[Nostr 2025-02-12T17:29:26.981Z] Using cached metadata for b3e43e8cc7e6dff23a33d9213a3e912d895b1c3e4250240e0c99dbefe3068b5f
+Warning: Each child in a list should have a unique &quot;key&quot; prop.
+
+Check the render method of `HomePage`. See https://reactjs.org/link/warning-keys for more information.
+    at PostCard (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/src/components/post-card.tsx:28:21)
+    at HomePage (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/src/pages/home-page.tsx:27:36)
+    at Route (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=196e9e39:323:16)
+    at ProtectedRoute (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/src/lib/protected-route.tsx:22:3)
+    at Switch (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=196e9e39:379:17)
+    at AuthProvider (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/src/hooks/use-auth.tsx:26:32)
+    at QueryClientProvider (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=196e9e39:2805:3)
+    at App
+
+Check the render method of &#x60;HomePage&#x60;. See https://reactjs.org/link/warning-keys for more information.
+at PostCard (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/src/components/post-card.tsx:28:21)
+at HomePage (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/src/pages/home-page.tsx:27:36)
+at Route (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=196e9e39:323:16)
+at ProtectedRoute (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/src/lib/protected-route.tsx:22:3)
+at Switch (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=196e9e39:379:17)
+at AuthProvider (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/src/hooks/use-auth.tsx:26:32)
+at QueryClientProvider (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=196e9e39:2805:3)
+at App
+at t.value (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:17465)
+at new t (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:12630)
+at t.value (https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:32766)
+at https://10bb5181-ff52-4b91-8794-8cdd8f25a0bb-00-3f23fu7r12tfr.janeway.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:34400

@@ -36,12 +36,10 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {posts.map((post, index) => (
+                {posts.map((post) => (
                   <PostCard 
-                    key={post.nostrEventId} 
+                    key={`${post.nostrEventId}-${post.userId}`}
                     post={post}
-                    // 最初の10件のポストを優先的に処理
-                    priority={index < 10}
                   />
                 ))}
               </div>
