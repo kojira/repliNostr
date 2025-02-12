@@ -64,9 +64,11 @@ export function useNostr() {
   // キャッシュの有効性をチェックする関数
   const isValidCache = useCallback((pubkey: string): boolean => {
     const cached = metadataMemoryCache.get(pubkey);
-    return cached && 
-           Date.now() - cached.timestamp < CACHE_TTL && 
-           !cached.error;
+    return (
+      cached &&
+      Date.now() - cached.timestamp < CACHE_TTL &&
+      !cached.error
+    );
   }, []);
 
   // キャッシュからメタデータを適用する関数
@@ -84,17 +86,17 @@ export function useNostr() {
   // メタデータ取得の最適化されたインターフェース - シリアルに1件ずつ処理
   const loadPostMetadata = useCallback(
     async (pubkey: string) => {
-      if (!globalRxInstance || !subscriptionReadyRef.current) {
-        debugLog(
-          `Metadata load skipped: rxInstance=${!!globalRxInstance}, ready=${subscriptionReadyRef.current}, initialLoad=${isInitialLoadComplete.current}`,
-        );
-        return;
-      }
-
-      // キャッシュをもう一度チェック（非同期処理中にキャッシュが更新された可能性がある）
+      // キャッシュをチェック（この時点で有効なキャッシュがある場合は完全にスキップ）
       if (isValidCache(pubkey)) {
         debugLog(`Using cached metadata for ${pubkey}`);
         applyMetadataFromCache(pubkey);
+        return;
+      }
+
+      if (!globalRxInstance || !subscriptionReadyRef.current) {
+        debugLog(
+          `Metadata load skipped: rxInstance=${!!globalRxInstance}, ready=${subscriptionReadyRef.current}`,
+        );
         return;
       }
 
@@ -116,17 +118,13 @@ export function useNostr() {
           const rxReq = createRxForwardReq();
           const timeoutId = setTimeout(() => {
             debugLog(`Metadata request timeout for ${pubkey}`);
-            const currentRetries = retryCount.current.get(pubkey) || 0;
-            if (currentRetries < MAX_RETRIES) {
-              retryCount.current.set(pubkey, currentRetries + 1);
-              // タイムアウト時は再試行せず、デフォルト値を設定
-              metadataMemoryCache.set(pubkey, {
-                data: { name: `nostr:${pubkey.slice(0, 8)}` },
-                timestamp: Date.now(),
-                error: "Metadata fetch timeout",
-              });
-            }
-            reject(new Error("Timeout"));
+            // タイムアウト時はデフォルト値を設定し、キャッシュに保存
+            metadataMemoryCache.set(pubkey, {
+              data: { name: `nostr:${pubkey.slice(0, 8)}` },
+              timestamp: Date.now(),
+              error: "Metadata fetch timeout",
+            });
+            resolve(undefined); // タイムアウトも正常な完了として扱う
           }, METADATA_TIMEOUT);
 
           const subscription = globalRxInstance!.use(rxReq).subscribe({
@@ -153,7 +151,6 @@ export function useNostr() {
                   return updated;
                 });
 
-                retryCount.current.delete(event.pubkey);
                 resolve(undefined);
               } catch (error) {
                 debugLog("Error processing metadata:", error);
@@ -187,7 +184,10 @@ export function useNostr() {
         if (pendingMetadata.current.size > 0) {
           const nextPubkey = Array.from(pendingMetadata.current)[0];
           pendingMetadata.current.delete(nextPubkey);
-          loadPostMetadata(nextPubkey);
+          // 次の処理の前にもう一度キャッシュをチェック
+          if (!isValidCache(nextPubkey)) {
+            loadPostMetadata(nextPubkey);
+          }
         }
       }
     },
@@ -289,7 +289,9 @@ export function useNostr() {
                 });
               },
               complete: () => {
-                debugLog(`Initial fetch completed with ${initialEventsReceived} events`);
+                debugLog(
+                  `Initial fetch completed with ${initialEventsReceived} events`,
+                );
                 setIsSubscriptionReady(true);
                 subscriptionReadyRef.current = true;
                 isInitialLoadComplete.current = true;
