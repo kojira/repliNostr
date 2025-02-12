@@ -8,7 +8,6 @@ import {
   SheetTrigger,
 } from "./ui/sheet";
 import UserProfile from "./user-profile";
-import RelaySettings from "./relay-settings";
 import { useAuth } from "@/hooks/use-auth";
 
 export default function Navbar() {
@@ -32,10 +31,6 @@ export default function Navbar() {
             </SheetHeader>
             <div className="mt-4 space-y-6">
               <UserProfile user={user} />
-              <div>
-                <h2 className="text-lg font-semibold mb-4">リレー設定</h2>
-                <RelaySettings />
-              </div>
               <Button 
                 variant="outline" 
                 onClick={() => logoutMutation.mutate()}
