@@ -35,14 +35,23 @@ export function useNostr() {
   const pendingMetadataRequests = useRef<Set<string>>(new Set());
   const metadataUpdateQueue = useRef<Set<string>>(new Set());
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const batchSize = 10; // バッチサイズを10に削減
+  const batchSize = 50; // バッチサイズを増やして初期ロード時間を短縮
   const retryCount = useRef<Map<string, number>>(new Map());
   const MAX_RETRIES = 3;
   const [isSubscriptionReady, setIsSubscriptionReady] = useState(false);
   const activeSubscriptions = useRef<Set<string>>(new Set());
+  const DEBUG = true; // デバッグログの有効化
+
+  // Debug logger
+  const debugLog = useCallback((message: string, ...args: any[]) => {
+    if (DEBUG) {
+      console.log(`[Nostr] ${message}`, ...args);
+    }
+  }, []);
 
   // メタデータのクリーンアップ
   const cleanupMetadataRequests = useCallback(() => {
+    debugLog("Cleaning up metadata requests");
     pendingMetadataRequests.current.clear();
     metadataUpdateQueue.current.clear();
     retryCount.current.clear();
@@ -50,16 +59,18 @@ export function useNostr() {
       clearTimeout(updateTimeoutRef.current);
       updateTimeoutRef.current = null;
     }
-  }, []);
+  }, [debugLog]);
 
   // Process metadata updates in batches
   const processBatchMetadataUpdate = useCallback(() => {
     if (!rxRef.current || metadataUpdateQueue.current.size === 0 || !isSubscriptionReady) return;
 
     const pubkeys = Array.from(metadataUpdateQueue.current).slice(0, batchSize);
-    // 既に処理中のpubkeyは除外
     const unprocessedPubkeys = pubkeys.filter(key => !pendingMetadataRequests.current.has(key));
+
     if (unprocessedPubkeys.length === 0) return;
+
+    debugLog(`Processing metadata batch for ${unprocessedPubkeys.length} pubkeys`);
 
     unprocessedPubkeys.forEach(key => {
       metadataUpdateQueue.current.delete(key);
@@ -75,18 +86,22 @@ export function useNostr() {
       limit: 1
     };
 
+    debugLog(`Requesting metadata with filter:`, filter);
+
     const rxReq = createRxForwardReq();
-    const metadataStartTime = Date.now();
-    const timeoutMs = 10000; // 10秒タイムアウト
+    const timeoutMs = 5000; // タイムアウトを5秒に短縮
 
     const timeoutId = setTimeout(() => {
       if (activeSubscriptions.current.has(subscriptionId)) {
+        debugLog(`Metadata request timeout for subscription ${subscriptionId}`);
         unprocessedPubkeys.forEach(pubkey => {
           const currentRetries = retryCount.current.get(pubkey) || 0;
           if (currentRetries < MAX_RETRIES) {
+            debugLog(`Retrying metadata request for ${pubkey}, attempt ${currentRetries + 1}/${MAX_RETRIES}`);
             retryCount.current.set(pubkey, currentRetries + 1);
             metadataUpdateQueue.current.add(pubkey);
           } else {
+            debugLog(`Max retries reached for ${pubkey}, using fallback`);
             metadataMemoryCache.set(pubkey, {
               data: { name: `nostr:${pubkey.slice(0, 8)}` },
               timestamp: Date.now(),
@@ -106,9 +121,9 @@ export function useNostr() {
           if (!activeSubscriptions.current.has(subscriptionId)) return;
 
           try {
+            debugLog(`Received metadata for ${event.pubkey}`);
             const metadata = JSON.parse(event.content) as UserMetadata;
 
-            // Update both memory cache and state
             const processedMetadata = {
               name: metadata.name || `nostr:${event.pubkey.slice(0, 8)}`,
               picture: metadata.picture,
@@ -126,9 +141,10 @@ export function useNostr() {
               return updated;
             });
 
-            // Clear retry count on success
             retryCount.current.delete(event.pubkey);
+            debugLog(`Successfully processed metadata for ${event.pubkey}`);
           } catch (error) {
+            debugLog(`Error processing metadata for ${event.pubkey}:`, error);
             const currentRetries = retryCount.current.get(event.pubkey) || 0;
             if (currentRetries < MAX_RETRIES) {
               metadataUpdateQueue.current.add(event.pubkey);
@@ -140,6 +156,7 @@ export function useNostr() {
         },
         error: (error) => {
           if (!activeSubscriptions.current.has(subscriptionId)) return;
+          debugLog(`Subscription ${subscriptionId} error:`, error);
 
           unprocessedPubkeys.forEach(pubkey => {
             const currentRetries = retryCount.current.get(pubkey) || 0;
@@ -151,10 +168,14 @@ export function useNostr() {
           });
         },
         complete: () => {
+          debugLog(`Subscription ${subscriptionId} completed`);
           clearTimeout(timeoutId);
           activeSubscriptions.current.delete(subscriptionId);
         }
       });
+
+    rxReq.emit(filter);
+    debugLog(`Emitted filter for subscription ${subscriptionId}`);
 
     // If there are more items in the queue, schedule next batch
     if (metadataUpdateQueue.current.size > 0) {
@@ -167,8 +188,9 @@ export function useNostr() {
     return () => {
       subscription.unsubscribe();
       activeSubscriptions.current.delete(subscriptionId);
+      debugLog(`Cleaned up subscription ${subscriptionId}`);
     };
-  }, [isSubscriptionReady]);
+  }, [isSubscriptionReady, debugLog]);
 
   // メタデータの更新をキューに追加
   const queueMetadataUpdate = useCallback((pubkey: string) => {
@@ -269,6 +291,7 @@ export function useNostr() {
     }
 
     try {
+      debugLog("Initializing rx-nostr");
       rxRef.current = createRxNostr({ verifier });
       rxRef.current.setDefaultRelays(DEFAULT_RELAYS);
       setInitialized(true);
@@ -282,6 +305,8 @@ export function useNostr() {
             since: Math.floor(Date.now() / 1000) - 24 * 60 * 60
           };
 
+          debugLog("Subscribing to posts with filter:", filter);
+
           const rxReq = createRxForwardReq();
           const subscriptionId = Math.random().toString(36).substring(7);
           activeSubscriptions.current.add(subscriptionId);
@@ -291,6 +316,7 @@ export function useNostr() {
             .subscribe({
               next: ({ event }) => {
                 if (!activeSubscriptions.current.has(subscriptionId)) return;
+                debugLog(`Received post from ${event.pubkey}`);
 
                 setPosts(currentPosts => {
                   if (currentPosts.has(event.id)) return currentPosts;
@@ -318,7 +344,7 @@ export function useNostr() {
               },
               error: (error) => {
                 if (!activeSubscriptions.current.has(subscriptionId)) return;
-                console.error("[Nostr] Error:", error);
+                debugLog("Post subscription error:", error);
                 toast({
                   title: "エラー",
                   description: "データの取得中にエラーが発生しました",
@@ -326,19 +352,22 @@ export function useNostr() {
                 });
               },
               complete: () => {
+                debugLog(`Post subscription ${subscriptionId} completed`);
                 activeSubscriptions.current.delete(subscriptionId);
               }
             });
 
           rxReq.emit(filter);
+          debugLog(`Emitted post filter for subscription ${subscriptionId}`);
           setIsSubscriptionReady(true);
 
           return () => {
             subscription.unsubscribe();
             activeSubscriptions.current.delete(subscriptionId);
+            debugLog(`Cleaned up post subscription ${subscriptionId}`);
           };
         } catch (error) {
-          console.error("[Nostr] Error:", error);
+          debugLog("Error in fetchFromRelays:", error);
           toast({
             title: "エラー",
             description: "初期化に失敗しました",
@@ -349,7 +378,7 @@ export function useNostr() {
 
       fetchFromRelays();
     } catch (error) {
-      console.error("[Nostr] Error:", error);
+      debugLog("Error during initialization:", error);
       toast({
         title: "エラー",
         description: "初期化に失敗しました",
@@ -359,6 +388,7 @@ export function useNostr() {
 
     return () => {
       if (rxRef.current) {
+        debugLog("Cleaning up rx-nostr");
         activeSubscriptions.current.clear();
         cleanupMetadataRequests();
         rxRef.current.dispose();
@@ -367,7 +397,7 @@ export function useNostr() {
         setIsSubscriptionReady(false);
       }
     };
-  }, [cleanupMetadataRequests]);
+  }, [cleanupMetadataRequests, toast]);
 
 
   const createPostMutation = useMutation({
