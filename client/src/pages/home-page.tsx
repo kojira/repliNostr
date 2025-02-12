@@ -26,18 +26,23 @@ export default function HomePage() {
               Logout
             </Button>
           </aside>
-          
+
           <main className="space-y-6">
             <PostForm onSubmit={createPost} isSubmitting={isCreatingPost} />
-            
+
             {isLoadingPosts ? (
               <div className="flex justify-center p-8">
                 <Loader2 className="h-8 w-8 animate-spin" />
               </div>
             ) : (
               <div className="space-y-4">
-                {posts.map((post) => (
-                  <PostCard key={post.nostrEventId} post={post} />
+                {posts.map((post, index) => (
+                  <PostCard 
+                    key={post.nostrEventId} 
+                    post={post}
+                    // 最初の10件のポストを優先的に処理
+                    priority={index < 10}
+                  />
                 ))}
               </div>
             )}

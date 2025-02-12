@@ -5,31 +5,71 @@ import { Post } from "@shared/schema";
 import { format } from "date-fns";
 import { useNostr } from "@/hooks/use-nostr";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
+import { memo, useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 
 interface PostCardProps {
   post: Post;
+  priority?: boolean;
 }
 
-export default function PostCard({ post }: PostCardProps) {
+function PostCard({ post, priority = false }: PostCardProps) {
   const { getUserMetadata } = useNostr();
+  const [isLoading, setIsLoading] = useState(!priority);
   const metadata = getUserMetadata(post.pubkey);
 
+  // Truncated pubkey for fallback display
+  const shortPubkey = post.pubkey.slice(0, 8);
+
+  // メタデータ取得の遅延開始（非優先の場合）
+  useEffect(() => {
+    if (!priority) {
+      const timer = setTimeout(() => {
+        setIsLoading(false);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+    setIsLoading(false);
+  }, [priority]);
+
+  const renderAvatar = () => {
+    if (isLoading) {
+      return <Skeleton className="h-10 w-10 rounded-full" />;
+    }
+
+    return (
+      <Avatar className="h-10 w-10">
+        {metadata?.picture ? (
+          <AvatarImage 
+            src={metadata.picture} 
+            alt={metadata.name || shortPubkey}
+            onError={(e) => {
+              // Remove src on error to show fallback
+              (e.target as HTMLImageElement).src = '';
+            }}
+          />
+        ) : (
+          <AvatarFallback>
+            {(metadata?.name?.[0] || shortPubkey.slice(0, 2)).toUpperCase()}
+          </AvatarFallback>
+        )}
+      </Avatar>
+    );
+  };
+
   return (
-    <Card>
+    <Card className={cn(isLoading && "opacity-70")}>
       <CardHeader className="flex flex-row items-center gap-4">
-        <Avatar className="h-10 w-10">
-          {metadata?.picture ? (
-            <AvatarImage src={metadata.picture} alt={metadata.name || 'User avatar'} />
+        {renderAvatar()}
+        <div className="space-y-1">
+          {isLoading ? (
+            <Skeleton className="h-4 w-24" />
           ) : (
-            <AvatarFallback>
-              {(metadata?.name || post.pubkey.slice(0, 2)).toUpperCase()}
-            </AvatarFallback>
+            <p className="font-semibold">
+              {metadata?.name || `@${shortPubkey}`}
+            </p>
           )}
-        </Avatar>
-        <div>
-          <p className="font-semibold">
-            {metadata?.name || `@${post.pubkey.slice(0, 8)}`}
-          </p>
           <p className="text-sm text-muted-foreground">
             {format(new Date(post.createdAt), "PPp")}
           </p>
@@ -55,3 +95,6 @@ export default function PostCard({ post }: PostCardProps) {
     </Card>
   );
 }
+
+// Memoize the component to prevent unnecessary re-renders
+export default memo(PostCard);

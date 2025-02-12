@@ -23,6 +23,9 @@ const METADATA_CACHE_KEY = 'nostr_metadata_cache';
 const METADATA_TIMESTAMP_KEY = 'nostr_metadata_timestamp';
 const CACHE_TTL = 1000 * 60 * 60; // 1時間
 
+// メモリ内キャッシュ
+const metadataMemoryCache = new Map<string, { data: UserMetadata; timestamp: number; error?: string }>();
+
 export function useNostr() {
   const { toast } = useToast();
   const rxRef = useRef<RxNostr | null>(null);
@@ -32,13 +35,17 @@ export function useNostr() {
   const pendingMetadataRequests = useRef<Set<string>>(new Set());
   const metadataUpdateQueue = useRef<Set<string>>(new Set());
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const batchSize = 20; // 一度に処理するメタデータの最大数
+  const retryCount = useRef<Map<string, number>>(new Map());
+  const MAX_RETRIES = 3;
+  const [isSubscriptionReady, setIsSubscriptionReady] = useState(false);
 
   // Process metadata updates in batches
   const processBatchMetadataUpdate = useCallback(() => {
-    if (!rxRef.current || metadataUpdateQueue.current.size === 0) return;
+    if (!rxRef.current || metadataUpdateQueue.current.size === 0 || !isSubscriptionReady) return;
 
-    const pubkeys = Array.from(metadataUpdateQueue.current);
-    metadataUpdateQueue.current.clear();
+    const pubkeys = Array.from(metadataUpdateQueue.current).slice(0, batchSize);
+    pubkeys.forEach(key => metadataUpdateQueue.current.delete(key));
 
     console.log(`[Nostr] Processing metadata batch for pubkeys:`, pubkeys);
 
@@ -50,6 +57,26 @@ export function useNostr() {
 
     const rxReq = createRxForwardReq();
     const metadataStartTime = Date.now();
+    const timeoutMs = 10000; // 10秒タイムアウト
+    const timeoutId = setTimeout(() => {
+      console.log(`[Nostr] Metadata request timeout for pubkeys:`, pubkeys);
+      pubkeys.forEach(pubkey => {
+        const currentRetries = retryCount.current.get(pubkey) || 0;
+        if (currentRetries < MAX_RETRIES) {
+          console.log(`[Nostr] Retrying metadata request for ${pubkey} (attempt ${currentRetries + 1}/${MAX_RETRIES})`);
+          retryCount.current.set(pubkey, currentRetries + 1);
+          metadataUpdateQueue.current.add(pubkey);
+        } else {
+          console.log(`[Nostr] Max retries reached for ${pubkey}, storing error state`);
+          metadataMemoryCache.set(pubkey, {
+            data: { name: `nostr:${pubkey.slice(0, 8)}` },
+            timestamp: Date.now(),
+            error: 'Metadata fetch failed'
+          });
+        }
+        pendingMetadataRequests.current.delete(pubkey);
+      });
+    }, timeoutMs);
 
     rxRef.current
       .use(rxReq)
@@ -58,54 +85,100 @@ export function useNostr() {
           try {
             const metadata = JSON.parse(event.content) as UserMetadata;
             console.log(`[Nostr] Received metadata for ${event.pubkey} in ${Date.now() - metadataStartTime}ms:`, metadata);
+
+            // Update both memory cache and state
+            const processedMetadata = {
+              name: metadata.name || `nostr:${event.pubkey.slice(0, 8)}`,
+              picture: metadata.picture,
+              about: metadata.about
+            };
+
+            metadataMemoryCache.set(event.pubkey, {
+              data: processedMetadata,
+              timestamp: Date.now()
+            });
+
             setUserMetadata(current => {
               const updated = new Map(current);
-              updated.set(event.pubkey, {
-                name: metadata.name || `nostr:${event.pubkey.slice(0, 8)}`,
-                picture: metadata.picture,
-                about: metadata.about
-              });
+              updated.set(event.pubkey, processedMetadata);
               return updated;
             });
+
+            // Clear retry count on success
+            retryCount.current.delete(event.pubkey);
           } catch (error) {
             console.error(`[Nostr] Failed to parse metadata for ${event.pubkey}:`, error);
+            const currentRetries = retryCount.current.get(event.pubkey) || 0;
+            if (currentRetries < MAX_RETRIES) {
+              metadataUpdateQueue.current.add(event.pubkey);
+              retryCount.current.set(event.pubkey, currentRetries + 1);
+            }
           } finally {
             pendingMetadataRequests.current.delete(event.pubkey);
           }
         },
         error: (error) => {
           console.error("[Nostr] Error receiving metadata:", error);
-          pubkeys.forEach(pubkey => pendingMetadataRequests.current.delete(pubkey));
+          pubkeys.forEach(pubkey => {
+            const currentRetries = retryCount.current.get(pubkey) || 0;
+            if (currentRetries < MAX_RETRIES) {
+              metadataUpdateQueue.current.add(pubkey);
+              retryCount.current.set(pubkey, currentRetries + 1);
+            }
+            pendingMetadataRequests.current.delete(pubkey);
+          });
+        },
+        complete: () => {
+          clearTimeout(timeoutId);
         }
       });
 
     console.log("[Nostr] Metadata request filter emitted:", filter);
     rxReq.emit(filter);
-  }, []);
+
+    // If there are more items in the queue, schedule next batch
+    if (metadataUpdateQueue.current.size > 0) {
+      updateTimeoutRef.current = setTimeout(() => {
+        processBatchMetadataUpdate();
+        updateTimeoutRef.current = null;
+      }, 100);
+    }
+  }, [isSubscriptionReady]);
 
   // メタデータの更新をキューに追加
   const queueMetadataUpdate = useCallback((pubkey: string) => {
-    if (!rxRef.current) return;
+    if (!rxRef.current || !isSubscriptionReady) return;
 
-    const cached = userMetadata.get(pubkey);
-    const timestamp = localStorage.getItem(METADATA_TIMESTAMP_KEY);
-    const isStale = timestamp && (Date.now() - parseInt(timestamp, 10) >= CACHE_TTL);
+    // Check memory cache first
+    const memCached = metadataMemoryCache.get(pubkey);
+    if (memCached && (Date.now() - memCached.timestamp < CACHE_TTL)) {
+      // エラー状態のキャッシュの場合は再試行を検討
+      if (memCached.error) {
+        const currentRetries = retryCount.current.get(pubkey) || 0;
+        if (currentRetries < MAX_RETRIES) {
+          console.log(`[Nostr] Retrying failed metadata for ${pubkey}`);
+          metadataUpdateQueue.current.add(pubkey);
+          return;
+        }
+      }
 
-    // Skip if we have valid cached data
-    if (cached && !isStale) {
-      console.log(`[Nostr] Using cached metadata for ${pubkey}`);
+      if (!userMetadata.has(pubkey)) {
+        setUserMetadata(current => {
+          const updated = new Map(current);
+          updated.set(pubkey, memCached.data);
+          return updated;
+        });
+      }
       return;
     }
 
     // Skip if request is already pending
     if (pendingMetadataRequests.current.has(pubkey)) {
-      console.log(`[Nostr] Metadata request already pending for ${pubkey}`);
       return;
     }
 
     // Skip if pubkey is already in the queue
     if (metadataUpdateQueue.current.has(pubkey)) {
-      console.log(`[Nostr] Metadata update already queued for ${pubkey}`);
       return;
     }
 
@@ -122,8 +195,8 @@ export function useNostr() {
     updateTimeoutRef.current = setTimeout(() => {
       processBatchMetadataUpdate();
       updateTimeoutRef.current = null;
-    }, 500); // バッチ処理の間隔を500msに増やして重複を減らす
-  }, [userMetadata, processBatchMetadataUpdate]);
+    }, 100);
+  }, [userMetadata, processBatchMetadataUpdate, isSubscriptionReady]);
 
   // Load cached metadata on mount
   useEffect(() => {
@@ -138,7 +211,15 @@ export function useNostr() {
         // Check if cache is still valid
         if (Date.now() - parsedTimestamp < CACHE_TTL) {
           console.log("[Nostr] Loading cached metadata...");
-          setUserMetadata(new Map(Object.entries(parsedCache)));
+          const entries = Object.entries(parsedCache);
+          // Update both memory cache and state
+          entries.forEach(([key, value]) => {
+            metadataMemoryCache.set(key, {
+              data: value as UserMetadata,
+              timestamp: parsedTimestamp
+            });
+          });
+          setUserMetadata(new Map(entries));
           console.log("[Nostr] Cached metadata loaded successfully");
         } else {
           console.log("[Nostr] Cached metadata is stale, will fetch fresh data");
@@ -149,130 +230,147 @@ export function useNostr() {
     }
   }, []);
 
-  // Save metadata to cache whenever it changes
+  // Save metadata to cache periodically
   useEffect(() => {
-    try {
-      const metadataObject = Object.fromEntries(userMetadata);
-      localStorage.setItem(METADATA_CACHE_KEY, JSON.stringify(metadataObject));
-      localStorage.setItem(METADATA_TIMESTAMP_KEY, Date.now().toString());
-      console.log("[Nostr] Metadata cache updated");
-    } catch (error) {
-      console.error("[Nostr] Failed to cache metadata:", error);
-    }
+    const saveInterval = setInterval(() => {
+      try {
+        if (userMetadata.size > 0) {
+          const metadataObject = Object.fromEntries(userMetadata);
+          localStorage.setItem(METADATA_CACHE_KEY, JSON.stringify(metadataObject));
+          localStorage.setItem(METADATA_TIMESTAMP_KEY, Date.now().toString());
+          console.log("[Nostr] Metadata cache updated");
+        }
+      } catch (error) {
+        console.error("[Nostr] Failed to cache metadata:", error);
+      }
+    }, 60000); // Every minute
+
+    return () => clearInterval(saveInterval);
   }, [userMetadata]);
 
-  // Initialize rx-nostr and set default relays
+  // Initialize rx-nostr and set default relays with delay
   useEffect(() => {
     if (initialized || rxRef.current) {
       console.log("[Nostr] Already initialized, skipping");
       return;
     }
 
-    const startTime = Date.now();
-    console.log("[Nostr] Initializing rx-nostr...");
+    const initializeNostr = () => {
+      const startTime = Date.now();
+      console.log("[Nostr] Initializing rx-nostr...");
 
-    try {
-      rxRef.current = createRxNostr({
-        verifier
-      });
+      try {
+        rxRef.current = createRxNostr({
+          verifier
+        });
 
-      console.log("[Nostr] Setting default relays:", DEFAULT_RELAYS);
-      rxRef.current.setDefaultRelays(DEFAULT_RELAYS);
+        console.log("[Nostr] Setting default relays:", DEFAULT_RELAYS);
+        rxRef.current.setDefaultRelays(DEFAULT_RELAYS);
+        setInitialized(true);
 
-      // Subscribe to new posts from relays
-      const fetchFromRelays = async () => {
-        try {
-          console.log("[Nostr] Starting to fetch events from relays...");
-          const filter = {
-            kinds: [1],
-            limit: 100,
-            since: Math.floor(Date.now() / 1000) - 24 * 60 * 60 // Last 24 hours
+        // Delay subscription setup
+        setTimeout(() => {
+          // Subscribe to new posts from relays
+          const fetchFromRelays = async () => {
+            try {
+              console.log("[Nostr] Starting to fetch events from relays...");
+              const filter = {
+                kinds: [1],
+                limit: 100,
+                since: Math.floor(Date.now() / 1000) - 24 * 60 * 60 // Last 24 hours
+              };
+
+              const rxReq = createRxForwardReq();
+              console.log("[Nostr] Created forward request with filter:", filter);
+
+              let eventCount = 0;
+              const fetchStartTime = Date.now();
+
+              // Subscribe to events
+              rxRef.current!
+                .use(rxReq)
+                .subscribe({
+                  next: ({ event }) => {
+                    eventCount++;
+                    console.log(`[Nostr] Received event #${eventCount}:`, {
+                      id: event.id,
+                      pubkey: event.pubkey,
+                      time: Math.floor((Date.now() - fetchStartTime) / 1000) + 's'
+                    });
+
+                    // Add new event to posts Map if it doesn't exist
+                    setPosts(currentPosts => {
+                      if (currentPosts.has(event.id)) {
+                        console.log(`[Nostr] Event ${event.id} already exists, skipping`);
+                        return currentPosts;
+                      }
+
+                      // Create a temporary post object
+                      const newPost: Post = {
+                        id: 0,
+                        userId: 0,
+                        content: event.content,
+                        createdAt: new Date(event.created_at * 1000).toISOString(),
+                        nostrEventId: event.id,
+                        pubkey: event.pubkey,
+                        signature: event.sig,
+                        metadata: {
+                          tags: event.tags || [],
+                          relays: DEFAULT_RELAYS
+                        }
+                      };
+
+                      // Update Map with new post
+                      const updatedPosts = new Map(currentPosts);
+                      updatedPosts.set(event.id, newPost);
+                      console.log(`[Nostr] Added new post ${event.id}, total posts: ${updatedPosts.size}`);
+                      return updatedPosts;
+                    });
+
+                    // キューにメタデータ更新を追加（遅延実行）
+                    setTimeout(() => {
+                      queueMetadataUpdate(event.pubkey);
+                    }, 100);
+                  },
+                  error: (error) => {
+                    console.error("[Nostr] Error receiving events:", error);
+                    toast({
+                      title: "イベント取得エラー",
+                      description: "リレーからのイベント取得中にエラーが発生しました",
+                      variant: "destructive",
+                    });
+                  }
+                });
+
+              // Emit filter to start subscription
+              console.log("[Nostr] Emitting filter to start subscription");
+              rxReq.emit(filter);
+              console.log(`[Nostr] Setup completed in ${Date.now() - startTime}ms`);
+              setIsSubscriptionReady(true);
+            } catch (error) {
+              console.error("[Nostr] Failed to fetch events from relays:", error);
+              toast({
+                title: "初期化エラー",
+                description: "リレーからのイベント取得の設定に失敗しました",
+                variant: "destructive",
+              });
+            }
           };
 
-          const rxReq = createRxForwardReq();
-          console.log("[Nostr] Created forward request with filter:", filter);
+          fetchFromRelays();
+        }, 1000); // 1秒後にサブスクリプションを開始
+      } catch (error) {
+        console.error("[Nostr] Failed to initialize rx-nostr:", error);
+        toast({
+          title: "初期化エラー",
+          description: "rx-nostrの初期化に失敗しました",
+          variant: "destructive",
+        });
+      }
+    };
 
-          let eventCount = 0;
-          const fetchStartTime = Date.now();
-
-          // Subscribe to events
-          rxRef.current!
-            .use(rxReq)
-            .subscribe({
-              next: ({ event }) => {
-                eventCount++;
-                console.log(`[Nostr] Received event #${eventCount}:`, {
-                  id: event.id,
-                  pubkey: event.pubkey,
-                  time: Math.floor((Date.now() - fetchStartTime) / 1000) + 's'
-                });
-
-                // Add new event to posts Map if it doesn't exist
-                setPosts(currentPosts => {
-                  if (currentPosts.has(event.id)) {
-                    console.log(`[Nostr] Event ${event.id} already exists, skipping`);
-                    return currentPosts;
-                  }
-
-                  // キューにメタデータ更新を追加
-                  queueMetadataUpdate(event.pubkey);
-
-                  // Create a temporary post object
-                  const newPost: Post = {
-                    id: 0,
-                    userId: 0,
-                    content: event.content,
-                    createdAt: new Date(event.created_at * 1000).toISOString(),
-                    nostrEventId: event.id,
-                    pubkey: event.pubkey,
-                    signature: event.sig,
-                    metadata: {
-                      tags: event.tags || [],
-                      relays: DEFAULT_RELAYS
-                    }
-                  };
-
-                  // Update Map with new post
-                  const updatedPosts = new Map(currentPosts);
-                  updatedPosts.set(event.id, newPost);
-                  console.log(`[Nostr] Added new post ${event.id}, total posts: ${updatedPosts.size}`);
-                  return updatedPosts;
-                });
-              },
-              error: (error) => {
-                console.error("[Nostr] Error receiving events:", error);
-                toast({
-                  title: "イベント取得エラー",
-                  description: "リレーからのイベント取得中にエラーが発生しました",
-                  variant: "destructive",
-                });
-              }
-            });
-
-          // Emit filter to start subscription
-          console.log("[Nostr] Emitting filter to start subscription");
-          rxReq.emit(filter);
-          console.log(`[Nostr] Setup completed in ${Date.now() - startTime}ms`);
-          setInitialized(true);
-        } catch (error) {
-          console.error("[Nostr] Failed to fetch events from relays:", error);
-          toast({
-            title: "初期化エラー",
-            description: "リレーからのイベント取得の設定に失敗しました",
-            variant: "destructive",
-          });
-        }
-      };
-
-      fetchFromRelays();
-    } catch (error) {
-      console.error("[Nostr] Failed to initialize rx-nostr:", error);
-      toast({
-        title: "初期化エラー",
-        description: "rx-nostrの初期化に失敗しました",
-        variant: "destructive",
-      });
-    }
+    // 2秒後に初期化を開始
+    setTimeout(initializeNostr, 2000);
 
     return () => {
       if (rxRef.current) {
@@ -280,6 +378,7 @@ export function useNostr() {
         rxRef.current.dispose();
         rxRef.current = null;
         setInitialized(false);
+        setIsSubscriptionReady(false);
       }
     };
   }, []); // 依存配列を空にして、マウント時のみ実行されるようにする
@@ -397,6 +496,13 @@ export function useNostr() {
     updateProfile: updateProfileMutation.mutate,
     isUpdatingProfile: updateProfileMutation.isPending,
     getUserMetadata: useCallback((pubkey: string) => {
+      // Check memory cache first
+      const memCached = metadataMemoryCache.get(pubkey);
+      if (memCached && (Date.now() - memCached.timestamp < CACHE_TTL)) {
+        return memCached.data;
+      }
+
+      // Queue update if not in cache or expired
       if (!userMetadata.has(pubkey)) {
         queueMetadataUpdate(pubkey);
       }
