@@ -22,7 +22,7 @@ export class DatabaseStorage implements IStorage {
   constructor() {
     this.sessionStore = new PostgresSessionStore({
       pool,
-      createTableIfMissing: true,
+      tableName: 'session'  // 明示的にテーブル名を指定
     });
   }
 
