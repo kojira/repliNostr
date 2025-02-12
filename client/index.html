@@ -7,16 +7,25 @@
     <script>
         // Debug logging
         console.log('Current URL:', window.location.href);
+        console.log('Origin:', window.location.origin);
+        console.log('Pathname:', window.location.pathname);
         console.log('Redirect from sessionStorage:', sessionStorage.redirect);
 
         // Handle GitHub Pages SPA redirect
         (function() {
             const redirect = sessionStorage.redirect;
             delete sessionStorage.redirect;
-            if (redirect && redirect !== location.href) {
-                console.log('Redirecting from:', redirect);
-                history.replaceState(null, null, redirect.replace(location.origin + '/repliNostr', ''));
-                console.log('New URL:', window.location.href);
+
+            // Only handle redirects for GitHub Pages
+            if (location.hostname.includes('github.io')) {
+                if (redirect && redirect !== location.href) {
+                    console.log('GitHub Pages redirect from:', redirect);
+                    const newPath = redirect.replace(location.origin + '/repliNostr', '');
+                    console.log('New path:', newPath);
+                    history.replaceState(null, null, newPath);
+                }
+            } else {
+                console.log('Development environment - no redirect needed');
             }
         })();
     </script>
