@@ -43,6 +43,8 @@ const DEFAULT_RELAYS = [
   "wss://x.kojira.io",
 ];
 
+const DEBUG = true; // デバッグログを有効化
+
 export function useNostr() {
   const { toast } = useToast();
   const [initialized, setInitialized] = useState(false);
@@ -56,11 +58,11 @@ export function useNostr() {
   const seenEvents = useRef<Set<string>>(new Set());
   const lastEventTimestamp = useRef<number>(0);
   const lastMetadataRequest = useRef<number>(0);
-  const DEBUG = false; // デバッグログを最小限に
+
 
   const debugLog = useCallback((message: string, ...args: any[]) => {
     if (DEBUG) {
-      console.log(`[Nostr] ${message}`, ...args);
+      console.log(`[Nostr ${new Date().toISOString()}] ${message}`, ...args);
     }
   }, []);
 
@@ -79,15 +81,18 @@ export function useNostr() {
   // メタデータ更新の最適化されたバッチ処理
   const processBatchMetadataUpdate = useCallback(async () => {
     if (!globalRxInstance || metadataUpdateQueue.current.size === 0 || !isSubscriptionReady || isProcessingBatch || !isInitialLoadComplete) {
+      debugLog(`Batch update skipped: rxInstance=${!!globalRxInstance}, queueSize=${metadataUpdateQueue.current.size}, ready=${isSubscriptionReady}, processing=${isProcessingBatch}, initialLoad=${isInitialLoadComplete}`);
       return;
     }
 
     const now = Date.now();
     if (now - lastMetadataRequest.current < METADATA_REQUEST_INTERVAL) {
+      debugLog(`Too soon for next batch, waiting... (${METADATA_REQUEST_INTERVAL - (now - lastMetadataRequest.current)}ms remaining)`);
       return;
     }
 
     isProcessingBatch = true;
+    debugLog(`Starting batch metadata update with ${metadataUpdateQueue.current.size} items in queue`);
 
     try {
       // キューから未処理のpubkeyを取得（最大METADATA_BATCH_SIZE件）
@@ -96,10 +101,12 @@ export function useNostr() {
         .slice(0, METADATA_BATCH_SIZE);
 
       if (pubkeysToProcess.length === 0) {
+        debugLog('No pubkeys to process in this batch');
         isProcessingBatch = false;
         return;
       }
 
+      debugLog(`Processing batch for pubkeys: ${pubkeysToProcess.join(', ')}`);
       lastMetadataRequest.current = now;
 
       // バッチでメタデータをリクエスト
