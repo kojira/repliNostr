@@ -93,7 +93,7 @@ function PostCard({ post, priority = false }: PostCardProps) {
               </p>
             )}
             <p className="text-sm text-muted-foreground">
-              {format(new Date(post.createdAt), "PPp")}
+              {format(new Date(post.createdAt), "yyyy/MM/dd HH:mm:ss")}
             </p>
           </div>
           <DropdownMenu>
