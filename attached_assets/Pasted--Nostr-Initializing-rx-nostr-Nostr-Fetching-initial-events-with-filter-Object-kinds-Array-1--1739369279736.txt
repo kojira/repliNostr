@@ -1,0 +1,48 @@
+[Nostr] Initializing rx-nostr
+[Nostr] Fetching initial events with filter: 
+Object {kinds: Array(1), limit: 30, since: 1739282726}
+[Nostr] Loaded 71 events from cache
+[Nostr] Initializing rx-nostr
+[Nostr] Fetching initial events with filter: 
+Object {kinds: Array(1), limit: 30, since: 1739282726}
+[Nostr] Loaded 71 events from cache
+[Nostr] Initializing rx-nostr
+[Nostr] Fetching initial events with filter: 
+Object {kinds: Array(1), limit: 30, since: 1739282726}
+[Nostr] Loaded 71 events from cache
+[Nostr] Initializing rx-nostr
+[Nostr] Fetching initial events with filter: 
+Object {kinds: Array(1), limit: 30, since: 1739282726}
+[Nostr] Loaded 71 events from cache
+[Nostr] Initializing rx-nostr
+[Nostr] Fetching initial events with filter: 
+Object {kinds: Array(1), limit: 30, since: 1739282726}
+[Nostr] Loaded 71 events from cache
+[Nostr] Initializing rx-nostr
+[Nostr] Fetching initial events with filter: 
+Object {kinds: Array(1), limit: 30, since: 1739282726}
+[Nostr] Loaded 71 events from cache
+[Nostr] Initializing rx-nostr
+[Nostr] Fetching initial events with filter: 
+Object {kinds: Array(1), limit: 30, since: 1739282726}
+[Nostr] Loaded 71 events from cache
+[Nostr] Initializing rx-nostr
+[Nostr] Fetching initial events with filter: 
+Object {kinds: Array(1), limit: 30, since: 1739282726}
+[Nostr] Processing metadata batch for 1 pubkeys
+[Nostr] Requesting metadata with filter: 
+Object {kinds: Array(1), authors: Array(1), limit: 1}
+[Nostr] Emitted filter for subscription 54wwc4
+[Nostr] Processing metadata batch for 1 pubkeys
+[Nostr] Requesting metadata with filter: 
+Object {kinds: Array(1), authors: Array(1), limit: 1}
+[Nostr] Emitted filter for subscription 6anv7
+[Nostr] Processing metadata batch for 1 pubkeys
+[Nostr] Requesting metadata with filter: 
+Object {kinds: Array(1), authors: Array(1), limit: 1}
+[Nostr] Emitted filter for subscription w9h7tk
+[Nostr] Processing metadata batch for 1 pubkeys
+[Nostr] Requesting metadata with filter: 
+Object {kinds: Array(1), authors: Array(1), limit: 1}
+[Nostr] Emitted filter for subscription 5hub1j
+[Nostr] Processing metadata batch for 1 pubkeys

@@ -30,9 +30,12 @@ const EVENTS_CACHE_TTL = 1000 * 60 * 5; // 5分
 const metadataMemoryCache = new Map<string, { data: UserMetadata; timestamp: number; error?: string }>();
 const eventsMemoryCache = new Map<string, { data: Post; timestamp: number }>();
 
+// シングルトンとしてrx-nostrインスタンスを管理
+let globalRxInstance: RxNostr | null = null;
+let globalInitialized = false;
+
 export function useNostr() {
   const { toast } = useToast();
-  const rxRef = useRef<RxNostr | null>(null);
   const [initialized, setInitialized] = useState(false);
   const [posts, setPosts] = useState<Map<string, Post>>(new Map());
   const [userMetadata, setUserMetadata] = useState<Map<string, UserMetadata>>(new Map());
@@ -77,6 +80,8 @@ export function useNostr() {
             if (eventTime > lastEventTimestamp.current) {
               lastEventTimestamp.current = eventTime;
             }
+            // キャッシュからの投稿表示時にメタデータを取得
+            queueMetadataUpdate(post.pubkey);
           });
           setPosts(new Map(entries.map(([key, value]) => [key, value as Post])));
           debugLog(`Loaded ${entries.length} events from cache`);
@@ -85,29 +90,11 @@ export function useNostr() {
     } catch (error) {
       debugLog('Error loading events cache:', error);
     }
-  }, [debugLog]);
-
-  // Save events to cache periodically
-  useEffect(() => {
-    const saveInterval = setInterval(() => {
-      try {
-        if (posts.size > 0) {
-          const eventsObject = Object.fromEntries(posts);
-          localStorage.setItem(EVENTS_CACHE_KEY, JSON.stringify(eventsObject));
-          localStorage.setItem(EVENTS_TIMESTAMP_KEY, Date.now().toString());
-          debugLog(`Saved ${posts.size} events to cache`);
-        }
-      } catch (error) {
-        debugLog('Error saving events cache:', error);
-      }
-    }, 60000); // 1分ごと
-
-    return () => clearInterval(saveInterval);
-  }, [posts, debugLog]);
+  }, []);
 
   // Process metadata updates in batches
   const processBatchMetadataUpdate = useCallback(() => {
-    if (!rxRef.current || metadataUpdateQueue.current.size === 0 || !isSubscriptionReady) return;
+    if (!globalRxInstance || metadataUpdateQueue.current.size === 0 || !isSubscriptionReady) return;
 
     const pubkeys = Array.from(metadataUpdateQueue.current).slice(0, batchSize);
     const unprocessedPubkeys = pubkeys.filter(key => !pendingMetadataRequests.current.has(key));
@@ -158,7 +145,7 @@ export function useNostr() {
       }
     }, timeoutMs);
 
-    const subscription = rxRef.current
+    const subscription = globalRxInstance
       .use(rxReq)
       .subscribe({
         next: ({ event }) => {
@@ -235,7 +222,7 @@ export function useNostr() {
 
   // メタデータの更新をキューに追加
   const queueMetadataUpdate = useCallback((pubkey: string) => {
-    if (!rxRef.current || !isSubscriptionReady) return;
+    if (!globalRxInstance || !isSubscriptionReady) return;
 
     const memCached = metadataMemoryCache.get(pubkey);
     if (memCached && (Date.now() - memCached.timestamp < CACHE_TTL)) {
@@ -275,13 +262,21 @@ export function useNostr() {
 
   // Initialize rx-nostr once
   useEffect(() => {
-    if (initialized || rxRef.current) return;
+    // グローバルインスタンスが既に存在する場合は再利用
+    if (globalInitialized) {
+      setInitialized(true);
+      setIsSubscriptionReady(true);
+      return;
+    }
 
     const initializeNostr = async () => {
       try {
         debugLog("Initializing rx-nostr");
-        rxRef.current = createRxNostr({ verifier });
-        rxRef.current.setDefaultRelays(DEFAULT_RELAYS);
+        if (!globalRxInstance) {
+          globalRxInstance = createRxNostr({ verifier });
+          globalRxInstance.setDefaultRelays(DEFAULT_RELAYS);
+          globalInitialized = true;
+        }
         setInitialized(true);
 
         // 過去のイベントを取得する関数
@@ -298,7 +293,7 @@ export function useNostr() {
           const subscriptionId = Math.random().toString(36).substring(7);
           activeSubscriptions.current.add(subscriptionId);
 
-          return rxRef.current!
+          return globalRxInstance!
             .use(rxReq)
             .subscribe({
               next: ({ event }) => {
@@ -340,7 +335,7 @@ export function useNostr() {
           const rxReq = createRxForwardReq();
           rxReq.emit(continuousFilter);
 
-          return rxRef.current!
+          return globalRxInstance!
             .use(rxReq)
             .subscribe({
               next: ({ event }) => processEvent(event),
@@ -415,13 +410,9 @@ export function useNostr() {
     initializeNostr();
 
     return () => {
-      if (rxRef.current) {
+      if (globalRxInstance) {
         debugLog("Cleaning up rx-nostr");
         activeSubscriptions.current.clear();
-        rxRef.current.dispose();
-        rxRef.current = null;
-        setInitialized(false);
-        setIsSubscriptionReady(false);
         seenEvents.current.clear();
       }
     };
@@ -448,10 +439,10 @@ export function useNostr() {
           sig: event.privateKey
         };
 
-        if (!rxRef.current) {
+        if (!globalRxInstance) {
           throw new Error("rx-nostrが初期化されていません");
         }
-        await rxRef.current.send(signedEvent);
+        await globalRxInstance.send(signedEvent);
 
         return signedEvent;
       } catch (error) {
@@ -497,10 +488,10 @@ export function useNostr() {
           sig: event.privateKey
         };
 
-        if (!rxRef.current) {
+        if (!globalRxInstance) {
           throw new Error("rx-nostrが初期化されていません");
         }
-        await rxRef.current.send(signedEvent);
+        await globalRxInstance.send(signedEvent);
 
         return event.profile;
       } catch (error) {
