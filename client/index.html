@@ -5,20 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/repliNostr/" />
     <script>
-      // Debug logging
-      console.log('Current URL:', window.location.href);
-      console.log('Redirect from sessionStorage:', sessionStorage.redirect);
+        // Debug logging
+        console.log('Current URL:', window.location.href);
+        console.log('Redirect from sessionStorage:', sessionStorage.redirect);
 
-      // Handle GitHub Pages SPA redirect
-      (function() {
-        const redirect = sessionStorage.redirect;
-        delete sessionStorage.redirect;
-        if (redirect && redirect !== location.href) {
-          console.log('Redirecting from:', redirect);
-          history.replaceState(null, null, redirect.replace(location.origin + '/repliNostr', ''));
-          console.log('New URL:', window.location.href);
-        }
-      })();
+        // Handle GitHub Pages SPA redirect
+        (function() {
+            const redirect = sessionStorage.redirect;
+            delete sessionStorage.redirect;
+            if (redirect && redirect !== location.href) {
+                console.log('Redirecting from:', redirect);
+                history.replaceState(null, null, redirect.replace(location.origin + '/repliNostr', ''));
+                console.log('New URL:', window.location.href);
+            }
+        })();
     </script>
   </head>
   <body>
