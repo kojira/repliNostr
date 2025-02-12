@@ -16,17 +16,16 @@ const CACHE_TTL = 1000 * 60 * 60 * 3; // 3時間
 const EVENTS_CACHE_TTL = 1000 * 60 * 5; // 5分
 const MAX_CACHED_METADATA = 1000;
 const MAX_CACHED_EVENTS = 100;
-const METADATA_BATCH_SIZE = 3; // バッチサイズを3に減らしてさらに負荷を軽減
-const METADATA_REQUEST_INTERVAL = 3000; // インターバルを3秒に増やしてさらに余裕を持たせる
+const METADATA_BATCH_SIZE = 3;
+const METADATA_REQUEST_INTERVAL = 3000;
 const MAX_RETRIES = 3;
-const METADATA_TIMEOUT = 10000; // タイムアウトを10秒に短縮
+const METADATA_TIMEOUT = 10000;
 
 // メモリ内キャッシュ
 const metadataMemoryCache = new Map<string, { data: UserMetadata; timestamp: number; error?: string }>();
 const eventsMemoryCache = new Map<string, { data: Post; timestamp: number }>();
 const metadataRequestTimes = new Map<string, number>();
 let isProcessingBatch = false;
-let isInitialLoadComplete = false;
 
 // rx-nostrインスタンス管理
 let globalRxInstance: RxNostr | null = null;
@@ -43,11 +42,12 @@ const DEFAULT_RELAYS = [
   "wss://x.kojira.io",
 ];
 
-const DEBUG = true; // デバッグログを有効化
+const DEBUG = true;
 
 export function useNostr() {
   const { toast } = useToast();
   const [initialized, setInitialized] = useState(false);
+  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
   const [posts, setPosts] = useState<Map<string, Post>>(new Map());
   const [userMetadata, setUserMetadata] = useState<Map<string, UserMetadata>>(new Map());
   const pendingMetadataRequests = useRef<Set<string>>(new Set());
@@ -59,29 +59,16 @@ export function useNostr() {
   const lastEventTimestamp = useRef<number>(0);
   const lastMetadataRequest = useRef<number>(0);
 
-
   const debugLog = useCallback((message: string, ...args: any[]) => {
     if (DEBUG) {
       console.log(`[Nostr ${new Date().toISOString()}] ${message}`, ...args);
     }
   }, []);
 
-  // キャッシュ管理の最適化
-  const pruneMetadataCache = useCallback(() => {
-    if (metadataMemoryCache.size > MAX_CACHED_METADATA) {
-      const sortedEntries = Array.from(metadataMemoryCache.entries())
-        .sort(([, a], [, b]) => b.timestamp - a.timestamp)
-        .slice(0, MAX_CACHED_METADATA);
-
-      metadataMemoryCache.clear();
-      sortedEntries.forEach(([key, value]) => metadataMemoryCache.set(key, value));
-    }
-  }, []);
-
   // メタデータ更新の最適化されたバッチ処理
   const processBatchMetadataUpdate = useCallback(async () => {
-    if (!globalRxInstance || metadataUpdateQueue.current.size === 0 || !isSubscriptionReady || isProcessingBatch || !isInitialLoadComplete) {
-      debugLog(`Batch update skipped: rxInstance=${!!globalRxInstance}, queueSize=${metadataUpdateQueue.current.size}, ready=${isSubscriptionReady}, processing=${isProcessingBatch}, initialLoad=${isInitialLoadComplete}`);
+    if (!globalRxInstance || metadataUpdateQueue.current.size === 0 || !isSubscriptionReady || isProcessingBatch) {
+      debugLog(`Batch update skipped: rxInstance=${!!globalRxInstance}, queueSize=${metadataUpdateQueue.current.size}, ready=${isSubscriptionReady}, processing=${isProcessingBatch}`);
       return;
     }
 
@@ -95,7 +82,6 @@ export function useNostr() {
     debugLog(`Starting batch metadata update with ${metadataUpdateQueue.current.size} items in queue`);
 
     try {
-      // キューから未処理のpubkeyを取得（最大METADATA_BATCH_SIZE件）
       const pubkeysToProcess = Array.from(metadataUpdateQueue.current)
         .filter(pubkey => !pendingMetadataRequests.current.has(pubkey))
         .slice(0, METADATA_BATCH_SIZE);
@@ -109,7 +95,6 @@ export function useNostr() {
       debugLog(`Processing batch for pubkeys: ${pubkeysToProcess.join(', ')}`);
       lastMetadataRequest.current = now;
 
-      // バッチでメタデータをリクエスト
       const filter = {
         kinds: [0],
         authors: pubkeysToProcess,
@@ -206,7 +191,7 @@ export function useNostr() {
         }, METADATA_REQUEST_INTERVAL);
       }
     }
-  }, [isSubscriptionReady]);
+  }, [isSubscriptionReady, debugLog]);
 
   // メタデータ取得の最適化されたインターフェース
   const loadPostMetadata = useCallback((pubkey: string) => {
@@ -247,12 +232,11 @@ export function useNostr() {
       metadataUpdateQueue.current.add(pubkey);
       metadataRequestTimes.set(pubkey, now);
 
-      // バッチ処理が実行中でない場合のみ新しいバッチを開始
       if (!isProcessingBatch) {
         processBatchMetadataUpdate();
       }
     }
-  }, [isSubscriptionReady, processBatchMetadataUpdate]);
+  }, [isSubscriptionReady, isInitialLoadComplete, processBatchMetadataUpdate, debugLog]);
 
   // イベントとキャッシュの更新
   const updatePostsAndCache = useCallback((event: any, post: Post) => {
@@ -276,60 +260,7 @@ export function useNostr() {
     } else {
       debugLog(`Initial load not complete, skipping metadata for ${event.pubkey}`);
     }
-  }, [loadPostMetadata]);
-
-  // イベントキャッシュを保存
-  useEffect(() => {
-    const saveInterval = setInterval(() => {
-      try {
-        if (posts.size > 0) {
-          const sortedPosts = Array.from(posts.entries())
-            .sort(([, a], [, b]) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-            .slice(0, MAX_CACHED_EVENTS);
-
-          const eventsObject = Object.fromEntries(sortedPosts);
-          localStorage.setItem(EVENTS_CACHE_KEY, JSON.stringify(eventsObject));
-          localStorage.setItem(EVENTS_TIMESTAMP_KEY, Date.now().toString());
-        }
-      } catch (error) {
-        debugLog('Error saving events cache:', error);
-      }
-    }, 60000);
-
-    return () => clearInterval(saveInterval);
-  }, [posts, debugLog]);
-
-  // キャッシュからイベントを読み込み
-  useEffect(() => {
-    try {
-      const cached = localStorage.getItem(EVENTS_CACHE_KEY);
-      const timestamp = localStorage.getItem(EVENTS_TIMESTAMP_KEY);
-
-      if (cached && timestamp) {
-        const parsedCache = JSON.parse(cached);
-        const parsedTimestamp = parseInt(timestamp, 10);
-
-        if (Date.now() - parsedTimestamp < EVENTS_CACHE_TTL) {
-          const entries = Object.entries(parsedCache);
-          setPosts(new Map(entries.map(([key, value]) => [key, value as Post])));
-          entries.forEach(([key, value]) => {
-            const post = value as Post;
-            eventsMemoryCache.set(key, {
-              data: post,
-              timestamp: parsedTimestamp
-            });
-            seenEvents.current.add(key);
-            const eventTime = new Date(post.createdAt).getTime() / 1000;
-            if (eventTime > lastEventTimestamp.current) {
-              lastEventTimestamp.current = eventTime;
-            }
-          });
-        }
-      }
-    } catch (error) {
-      debugLog('Error loading events cache:', error);
-    }
-  }, [debugLog]);
+  }, [loadPostMetadata, isInitialLoadComplete]);
 
   // rx-nostrの初期化
   useEffect(() => {
@@ -402,23 +333,8 @@ export function useNostr() {
                 });
               },
               complete: () => {
-                debugLog("Initial fetch completed, setting isInitialLoadComplete to true");
-                isInitialLoadComplete = true;
-
-                // 初期ロード完了後すぐに全投稿のメタデータを取得
-                const uniquePubkeys = new Set<string>();
-                posts.forEach(post => uniquePubkeys.add(post.pubkey));
-                debugLog(`Requesting metadata for ${uniquePubkeys.size} unique pubkeys after initial load`);
-                uniquePubkeys.forEach(pubkey => {
-                  debugLog(`Queueing metadata request for pubkey: ${pubkey}`);
-                  metadataUpdateQueue.current.add(pubkey);
-                });
-
-                // バッチ処理が実行中でない場合のみ新しいバッチを開始
-                if (!isProcessingBatch) {
-                  debugLog('Starting initial metadata batch processing');
-                  processBatchMetadataUpdate();
-                }
+                debugLog("Initial fetch completed");
+                setIsInitialLoadComplete(true);
               }
             });
 
@@ -468,7 +384,90 @@ export function useNostr() {
     };
 
     initializeNostr();
-  }, [debugLog, toast, updatePostsAndCache, loadPostMetadata, posts]);
+  }, [debugLog, toast, updatePostsAndCache]);
+
+  // 初期ロード完了後のメタデータ取得
+  useEffect(() => {
+    if (isInitialLoadComplete && posts.size > 0) {
+      debugLog(`Initial load complete with ${posts.size} posts, starting metadata fetch`);
+      const uniquePubkeys = new Set<string>();
+      posts.forEach(post => uniquePubkeys.add(post.pubkey));
+      debugLog(`Found ${uniquePubkeys.size} unique pubkeys`);
+
+      uniquePubkeys.forEach(pubkey => {
+        debugLog(`Queueing metadata request for pubkey: ${pubkey}`);
+        metadataUpdateQueue.current.add(pubkey);
+      });
+
+      if (!isProcessingBatch) {
+        debugLog('Starting initial metadata batch processing');
+        processBatchMetadataUpdate();
+      }
+    }
+  }, [isInitialLoadComplete, posts, processBatchMetadataUpdate, debugLog]);
+
+  const pruneMetadataCache = useCallback(() => {
+    if (metadataMemoryCache.size > MAX_CACHED_METADATA) {
+      const sortedEntries = Array.from(metadataMemoryCache.entries())
+        .sort(([, a], [, b]) => b.timestamp - a.timestamp)
+        .slice(0, MAX_CACHED_METADATA);
+
+      metadataMemoryCache.clear();
+      sortedEntries.forEach(([key, value]) => metadataMemoryCache.set(key, value));
+    }
+  }, []);
+
+  useEffect(() => {
+    const saveInterval = setInterval(() => {
+      try {
+        if (posts.size > 0) {
+          const sortedPosts = Array.from(posts.entries())
+            .sort(([, a], [, b]) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .slice(0, MAX_CACHED_EVENTS);
+
+          const eventsObject = Object.fromEntries(sortedPosts);
+          localStorage.setItem(EVENTS_CACHE_KEY, JSON.stringify(eventsObject));
+          localStorage.setItem(EVENTS_TIMESTAMP_KEY, Date.now().toString());
+        }
+      } catch (error) {
+        debugLog('Error saving events cache:', error);
+      }
+    }, 60000);
+
+    return () => clearInterval(saveInterval);
+  }, [posts, debugLog]);
+
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem(EVENTS_CACHE_KEY);
+      const timestamp = localStorage.getItem(EVENTS_TIMESTAMP_KEY);
+
+      if (cached && timestamp) {
+        const parsedCache = JSON.parse(cached);
+        const parsedTimestamp = parseInt(timestamp, 10);
+
+        if (Date.now() - parsedTimestamp < EVENTS_CACHE_TTL) {
+          const entries = Object.entries(parsedCache);
+          setPosts(new Map(entries.map(([key, value]) => [key, value as Post])));
+          entries.forEach(([key, value]) => {
+            const post = value as Post;
+            eventsMemoryCache.set(key, {
+              data: post,
+              timestamp: parsedTimestamp
+            });
+            seenEvents.current.add(key);
+            const eventTime = new Date(post.createdAt).getTime() / 1000;
+            if (eventTime > lastEventTimestamp.current) {
+              lastEventTimestamp.current = eventTime;
+            }
+          });
+        }
+      }
+    } catch (error) {
+      debugLog('Error loading events cache:', error);
+    }
+  }, [debugLog]);
+
 
   return {
     posts: Array.from(posts.values()).sort((a, b) =>
