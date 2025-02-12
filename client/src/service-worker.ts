@@ -13,8 +13,8 @@ const STATIC_PATTERNS = [
   normalizedBaseUrl + '/',
   `${normalizedBaseUrl}/index.html`,
   // ビルドされたアセット（動的なファイル名に対応）
-  new RegExp(`${normalizedBaseUrl}/assets/index-.*\\.js`),
-  new RegExp(`${normalizedBaseUrl}/assets/index-.*\\.css`)
+  new RegExp(`${normalizedBaseUrl}/assets/.*\\.js`),
+  new RegExp(`${normalizedBaseUrl}/assets/.*\\.css`)
 ];
 
 self.addEventListener('install', (event) => {
@@ -52,7 +52,11 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => {
           // URLを正規化してキャッシュ
           const url = new URL(event.request.url);
-          const cacheKey = new Request(url.pathname + url.search, event.request);
+          // GitHub Pagesのベースパスを考慮
+          const pathname = url.pathname.startsWith(normalizedBaseUrl) 
+            ? url.pathname 
+            : normalizedBaseUrl + url.pathname;
+          const cacheKey = new Request(pathname + url.search, event.request);
           cache.put(cacheKey, responseToCache);
         });
 

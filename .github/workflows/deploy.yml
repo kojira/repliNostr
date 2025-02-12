@@ -24,22 +24,21 @@ jobs:
         run: |
           # Clean up public directory if it exists
           rm -rf public
+          # Export environment variables for build
+          export VITE_BASE_URL="/repliNostr/"
+          export VITE_ASSET_URL="/repliNostr/"
+          export BASE_URL="/repliNostr/"
           # Build the project
           npm run build
           # Ensure public directory exists and copy 404.html
-          mkdir -p public
-          cp ./client/public/404.html ./public/
+          mkdir -p dist/public
+          cp ./client/public/404.html ./dist/public/
           # Create .nojekyll file to prevent Jekyll processing
-          touch ./public/.nojekyll
-          # Copy build output to public directory
-          cp -r ./dist/public/* ./public/
-        env:
-          VITE_BASE_URL: /repliNostr/
-          VITE_ASSET_URL: /repliNostr/
+          touch ./dist/public/.nojekyll
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./public
+          publish_dir: ./dist/public
           force_orphan: true # Clean up gh-pages branch

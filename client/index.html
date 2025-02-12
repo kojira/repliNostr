@@ -3,13 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <base href="%VITE_BASE_URL%" />
+    <base href="/repliNostr/" />
     <script>
         // Debug logging
         console.log('Current URL:', window.location.href);
         console.log('Origin:', window.location.origin);
         console.log('Pathname:', window.location.pathname);
-        console.log('Redirect from sessionStorage:', sessionStorage.redirect);
+        console.log('Base URL:', import.meta.env.VITE_BASE_URL);
+        console.log('Asset URL:', import.meta.env.VITE_ASSET_URL);
 
         // Handle GitHub Pages SPA redirect
         (function() {
@@ -23,9 +24,9 @@
                     if (redirect !== location.href) {
                         console.log('GitHub Pages redirect from:', redirect);
                         // Ensure path is relative to /repliNostr/
-                        const newPath = new URL(redirect).pathname.replace('/repliNostr/', '');
+                        const newPath = redirect.replace(location.origin, '').replace('/repliNostr/', '/');
                         console.log('New path:', newPath);
-                        history.replaceState(null, null, newPath);
+                        history.replaceState(null, null, import.meta.env.VITE_BASE_URL + newPath);
                     }
                 }
             } else {
