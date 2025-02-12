@@ -132,20 +132,14 @@ export function useNostr() {
 
         const rxReq = createRxForwardReq();
 
-        // Define a listener for new events
+        // Subscribe to events
         rxRef.current
           .use(rxReq)
           .subscribe({
             next: ({ event }) => {
-              console.log("Received new event:", event);
               // Add new event to posts Map if it doesn't exist
               setPosts(currentPosts => {
-                if (currentPosts.has(event.id)) {
-                  console.log("Event already exists:", event.id);
-                  return currentPosts;
-                }
-
-                console.log("Adding new event:", event.id);
+                if (currentPosts.has(event.id)) return currentPosts;
 
                 // Fetch user metadata if not already cached
                 fetchUserMetadata(event.pubkey);
@@ -168,29 +162,6 @@ export function useNostr() {
                 // Update Map with new post
                 const updatedPosts = new Map(currentPosts);
                 updatedPosts.set(event.id, newPost);
-
-                // Try to cache the event in the background
-                try {
-                  fetch('/api/posts/cache', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      id: event.id,
-                      pubkey: event.pubkey,
-                      content: event.content,
-                      sig: event.sig,
-                      tags: event.tags,
-                      relays: DEFAULT_RELAYS
-                    })
-                  }).catch(error => {
-                    // Ignore cache errors - they don't affect the UI
-                    console.error("Failed to cache event:", error);
-                  });
-                } catch (error) {
-                  // Ignore cache errors - they don't affect the UI
-                  console.error("Failed to cache event:", error);
-                }
-
                 return updatedPosts;
               });
             },
@@ -200,7 +171,6 @@ export function useNostr() {
           });
 
         // Emit filter to start subscription
-        console.log("Emitting filter:", filter);
         rxReq.emit(filter);
       } catch (error) {
         console.error("Failed to fetch events from relays:", error);
@@ -235,28 +205,6 @@ export function useNostr() {
 
         // Publish event
         await rxRef.current!.send(signedEvent);
-
-        // Try to cache the event in the background
-        try {
-          fetch('/api/posts/cache', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: signedEvent.id,
-              pubkey: signedEvent.pubkey,
-              content: signedEvent.content,
-              sig: signedEvent.sig,
-              tags: signedEvent.tags,
-              relays: DEFAULT_RELAYS
-            })
-          }).catch(error => {
-            // Ignore cache errors - they don't affect the UI
-            console.error("Failed to cache event:", error);
-          });
-        } catch (error) {
-          // Ignore cache errors - they don't affect the UI
-          console.error("Failed to cache event:", error);
-        }
 
         return signedEvent;
       } catch (error) {
@@ -308,9 +256,6 @@ export function useNostr() {
         // Publish event
         await rxRef.current!.send(signedEvent);
 
-        // Update user profile in database
-        await apiRequest("POST", "/api/profile", event.profile);
-
         return event.profile;
       } catch (error) {
         console.error("Failed to update profile:", error);
@@ -320,7 +265,7 @@ export function useNostr() {
     onSuccess: () => {
       toast({
         title: "プロフィールを更新しました",
-        description: "プロフィール情報がNostrリレーとデータベースに保存されました",
+        description: "プロフィール情報がNostrリレーに保存されました",
       });
     },
     onError: (error: Error) => {
