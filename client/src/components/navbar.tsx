@@ -13,7 +13,7 @@ import { useAuth } from "@/hooks/use-auth";
 
 export default function Navbar() {
   const { user, logoutMutation } = useAuth();
-  
+
   if (!user) return null;
 
   return (
@@ -32,7 +32,10 @@ export default function Navbar() {
             </SheetHeader>
             <div className="mt-4 space-y-6">
               <UserProfile user={user} />
-              <RelaySettings />
+              <div>
+                <SheetTitle className="mb-4">リレー設定</SheetTitle>
+                <RelaySettings />
+              </div>
               <Button 
                 variant="outline" 
                 onClick={() => logoutMutation.mutate()}
