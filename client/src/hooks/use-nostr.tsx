@@ -65,16 +65,81 @@ export function useNostr() {
 
   // Initialize rx-nostr and set default relays
   useEffect(() => {
+    console.log("Initializing rx-nostr...");
     rxRef.current = createRxNostr({
       verifier
     });
 
     if (rxRef.current) {
+      console.log("Setting default relays:", DEFAULT_RELAYS);
       rxRef.current.setDefaultRelays(DEFAULT_RELAYS);
+
+      // Subscribe to new posts from relays
+      const fetchFromRelays = async () => {
+        try {
+          console.log("Starting to fetch events from relays...");
+          const filter = {
+            kinds: [1],
+            limit: 100,
+            since: Math.floor(Date.now() / 1000) - 24 * 60 * 60 // Last 24 hours
+          };
+
+          const rxReq = createRxForwardReq();
+          console.log("Created forward request with filter:", filter);
+
+          // Subscribe to events
+          rxRef.current
+            .use(rxReq)
+            .subscribe({
+              next: ({ event }) => {
+                console.log("Received event:", event);
+                // Add new event to posts Map if it doesn't exist
+                setPosts(currentPosts => {
+                  if (currentPosts.has(event.id)) return currentPosts;
+
+                  // キューにメタデータ更新を追加
+                  queueMetadataUpdate(event.pubkey);
+
+                  // Create a temporary post object
+                  const newPost: Post = {
+                    id: 0, // This will be set by the database
+                    userId: 0, // This will be set by the database
+                    content: event.content,
+                    createdAt: new Date(event.created_at * 1000).toISOString(),
+                    nostrEventId: event.id,
+                    pubkey: event.pubkey,
+                    signature: event.sig,
+                    metadata: {
+                      tags: event.tags || [],
+                      relays: DEFAULT_RELAYS
+                    }
+                  };
+
+                  // Update Map with new post
+                  const updatedPosts = new Map(currentPosts);
+                  updatedPosts.set(event.id, newPost);
+                  return updatedPosts;
+                });
+              },
+              error: (error) => {
+                console.error("Error receiving events:", error);
+              }
+            });
+
+          // Emit filter to start subscription
+          console.log("Emitting filter to start subscription");
+          rxReq.emit(filter);
+        } catch (error) {
+          console.error("Failed to fetch events from relays:", error);
+        }
+      };
+
+      fetchFromRelays();
     }
 
     return () => {
       if (rxRef.current) {
+        console.log("Disposing rx-nostr...");
         rxRef.current.dispose();
       }
     };
@@ -92,7 +157,7 @@ export function useNostr() {
     const filter = {
       kinds: [0],
       authors: pubkeys,
-      limit: pubkeys.length
+      limit: 1
     };
 
     const rxReq = createRxForwardReq();
@@ -165,68 +230,6 @@ export function useNostr() {
       updateTimeoutRef.current = null;
     }, 100); // 100ms後にバッチ処理を実行
   };
-
-  // Subscribe to new posts from relays
-  useEffect(() => {
-    if (!rxRef.current) return;
-
-    const fetchFromRelays = async () => {
-      try {
-        const filter = {
-          kinds: [1],
-          limit: 100,
-          since: Math.floor(Date.now() / 1000) - 24 * 60 * 60 // Last 24 hours
-        };
-
-        const rxReq = createRxForwardReq();
-
-        // Subscribe to events
-        rxRef.current
-          .use(rxReq)
-          .subscribe({
-            next: ({ event }) => {
-              // Add new event to posts Map if it doesn't exist
-              setPosts(currentPosts => {
-                if (currentPosts.has(event.id)) return currentPosts;
-
-                // キューにメタデータ更新を追加
-                queueMetadataUpdate(event.pubkey);
-
-                // Create a temporary post object
-                const newPost: Post = {
-                  id: 0, // This will be set by the database
-                  userId: 0, // This will be set by the database
-                  content: event.content,
-                  createdAt: new Date(event.created_at * 1000).toISOString(),
-                  nostrEventId: event.id,
-                  pubkey: event.pubkey,
-                  signature: event.sig,
-                  metadata: {
-                    tags: event.tags || [],
-                    relays: DEFAULT_RELAYS
-                  }
-                };
-
-                // Update Map with new post
-                const updatedPosts = new Map(currentPosts);
-                updatedPosts.set(event.id, newPost);
-                return updatedPosts;
-              });
-            },
-            error: (error) => {
-              console.error("Error receiving events:", error);
-            }
-          });
-
-        // Emit filter to start subscription
-        rxReq.emit(filter);
-      } catch (error) {
-        console.error("Failed to fetch events from relays:", error);
-      }
-    };
-
-    fetchFromRelays();
-  }, []);
 
   const createPostMutation = useMutation({
     mutationFn: async (event: { content: string; pubkey: string; privateKey: string }) => {
