@@ -346,7 +346,16 @@ export function useNostr() {
       try {
         debugLog("Starting rx-nostr initialization");
         if (!globalRxInstance) {
-          globalRxInstance = createRxNostr({ verifier });
+          if (!user?.privateKey) {
+            debugLog("No private key available, initializing without signer");
+            globalRxInstance = createRxNostr({ verifier });
+          } else {
+            debugLog("Initializing with signer");
+            globalRxInstance = createRxNostr({
+              verifier,
+              signer: seckeySigner(user.privateKey)
+            });
+          }
           globalRxInstance.setDefaultRelays(DEFAULT_RELAYS);
           globalInitialized = true;
           debugLog("Created new rx-nostr instance");
@@ -458,48 +467,46 @@ export function useNostr() {
     };
 
     initializeNostr();
-  }, [debugLog, toast, updatePostsAndCache]);
+  }, [debugLog, toast, updatePostsAndCache, user?.privateKey]);
 
   // Create post mutation
   const createPostMutation = useMutation({
     mutationFn: async (content: string) => {
-      if (!user?.privateKey) {
-        throw new Error("Private key not available");
+      if (!user?.privateKey || !globalRxInstance) {
+        throw new Error("Not ready to post");
       }
 
-      const signer = seckeySigner(user.privateKey);
-      if (!globalRxInstance) {
-        throw new Error("rx-nostr instance not initialized");
-      }
-
-      const event = await signer.sign({
+      const event = {
         kind: 1,
         content,
         created_at: Math.floor(Date.now() / 1000),
         tags: [],
-      });
+      };
 
       return new Promise<Post>((resolve, reject) => {
-        try {
-          globalRxInstance!.send(event).then(() => {
-            const post: Post = {
-              id: 0,
-              userId: user.id,
-              content: event.content,
-              createdAt: new Date(event.created_at * 1000).toISOString(),
-              nostrEventId: event.id,
-              pubkey: event.pubkey,
-              signature: event.sig,
-              metadata: {
-                tags: event.tags,
-                relays: DEFAULT_RELAYS,
-              },
-            };
-            resolve(post);
-          }).catch(reject);
-        } catch (error) {
-          reject(error);
-        }
+        globalRxInstance!.send(event).subscribe({
+          next: (packet) => {
+            if (packet.ok) {
+              const post: Post = {
+                id: 0,
+                userId: user.id,
+                content: event.content,
+                createdAt: new Date(event.created_at * 1000).toISOString(),
+                nostrEventId: packet.id!,
+                pubkey: user.publicKey,
+                signature: packet.sig!,
+                metadata: {
+                  tags: event.tags,
+                  relays: DEFAULT_RELAYS,
+                },
+              };
+              resolve(post);
+            } else {
+              reject(new Error(`Failed to send to ${packet.from}`));
+            }
+          },
+          error: (error) => reject(error),
+        });
       });
     },
     onSuccess: (post) => {
@@ -509,15 +516,15 @@ export function useNostr() {
         return updatedPosts;
       });
       toast({
-        title: "Success",
-        description: "Post created successfully",
+        title: "成功",
+        description: "投稿を送信しました",
       });
     },
     onError: (error) => {
       console.error("Error creating post:", error);
       toast({
-        title: "Error",
-        description: "Failed to create post",
+        title: "エラー",
+        description: "投稿に失敗しました",
         variant: "destructive",
       });
     },
@@ -534,7 +541,6 @@ export function useNostr() {
       [userMetadata],
     ),
     loadPostMetadata,
-    // Add createPost function and loading state
     createPost: createPostMutation.mutate,
     isCreatingPost: createPostMutation.isPending,
   };
