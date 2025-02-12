@@ -53,14 +53,13 @@ export function useNostr() {
   const seenEvents = useRef<Set<string>>(new Set());
   const lastEventTimestamp = useRef<number>(0);
   const isInitialLoadComplete = useRef(false);
-  const pendingMetadata = useRef<string[]>([]);
+  const pendingMetadata = useRef<Set<string>>(new Set());
 
   const debugLog = useCallback((message: string, ...args: any[]) => {
     if (DEBUG) {
       console.log(`[Nostr ${new Date().toISOString()}] ${message}`, ...args);
     }
   }, []);
-
 
   // キャッシュの有効性をチェックする関数
   const isValidCache = useCallback((pubkey: string): boolean => {
@@ -87,16 +86,20 @@ export function useNostr() {
     async (pubkey: string) => {
       if (!globalRxInstance || !subscriptionReadyRef.current) {
         debugLog(
-          `Metadata load skipped: rxInstance=${!!globalRxInstance}, ready=${subscriptionReadyRef.current}`,
+          `Metadata load skipped: rxInstance=${!!globalRxInstance}, ready=${subscriptionReadyRef.current}, initialLoad=${isInitialLoadComplete.current}`,
         );
         return;
       }
 
-      // 既に処理中の場合はキューに追加
-      if (isProcessingMetadata) {
-        if (!pendingMetadata.current.includes(pubkey)) {
-          pendingMetadata.current.push(pubkey);
-        }
+      // キャッシュをもう一度チェック（非同期処理中にキャッシュが更新された可能性がある）
+      if (isValidCache(pubkey)) {
+        debugLog(`Using cached metadata for ${pubkey}`);
+        applyMetadataFromCache(pubkey);
+        return;
+      }
+
+      // 既に処理中または処理待ちの場合はスキップ
+      if (isProcessingMetadata || pendingMetadata.current.has(pubkey)) {
         return;
       }
 
@@ -116,13 +119,11 @@ export function useNostr() {
             const currentRetries = retryCount.current.get(pubkey) || 0;
             if (currentRetries < MAX_RETRIES) {
               retryCount.current.set(pubkey, currentRetries + 1);
-              pendingMetadata.current.push(pubkey); // リトライのためにキューに追加
-            } else {
-              debugLog(`Max retries reached for pubkey: ${pubkey}`);
+              // タイムアウト時は再試行せず、デフォルト値を設定
               metadataMemoryCache.set(pubkey, {
                 data: { name: `nostr:${pubkey.slice(0, 8)}` },
                 timestamp: Date.now(),
-                error: "Metadata fetch failed after max retries",
+                error: "Metadata fetch timeout",
               });
             }
             reject(new Error("Timeout"));
@@ -180,14 +181,17 @@ export function useNostr() {
         debugLog(`Error fetching metadata for ${pubkey}:`, error);
       } finally {
         isProcessingMetadata = false;
-        // キューに溜まっているメタデータを処理
-        const nextPubkey = pendingMetadata.current.shift();
-        if (nextPubkey) {
+        pendingMetadata.current.delete(pubkey);
+
+        // 次の処理待ちがあれば処理
+        if (pendingMetadata.current.size > 0) {
+          const nextPubkey = Array.from(pendingMetadata.current)[0];
+          pendingMetadata.current.delete(nextPubkey);
           loadPostMetadata(nextPubkey);
         }
       }
     },
-    [debugLog],
+    [debugLog, isValidCache, applyMetadataFromCache],
   );
 
   // イベントとキャッシュの更新
@@ -210,8 +214,11 @@ export function useNostr() {
       if (isValidCache(event.pubkey)) {
         debugLog(`Using cached metadata for ${event.pubkey}`);
         applyMetadataFromCache(event.pubkey);
-      } else {
-        loadPostMetadata(event.pubkey);
+      } else if (!pendingMetadata.current.has(event.pubkey)) {
+        pendingMetadata.current.add(event.pubkey);
+        if (!isProcessingMetadata) {
+          loadPostMetadata(event.pubkey);
+        }
       }
     },
     [debugLog, loadPostMetadata, isValidCache, applyMetadataFromCache],
@@ -399,13 +406,7 @@ export function useNostr() {
     ),
     isLoadingPosts: !initialized,
     getUserMetadata: useCallback(
-      (pubkey: string) => {
-        const memCached = metadataMemoryCache.get(pubkey);
-        if (memCached && Date.now() - memCached.timestamp < CACHE_TTL) {
-          return memCached.data;
-        }
-        return userMetadata.get(pubkey);
-      },
+      (pubkey: string) => userMetadata.get(pubkey),
       [userMetadata],
     ),
     loadPostMetadata,
