@@ -19,19 +19,24 @@ export function registerRoutes(app: Express): Server {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     const validatedPost = insertPostSchema.parse(req.body);
 
-    const post = {
-      ...validatedPost,
-      userId: req.user.id,
-      createdAt: new Date().toISOString()
-    };
-
-    res.json(post);
+    try {
+      const post = await storage.createPost(validatedPost.content, req.user.id);
+      res.json(post);
+    } catch (error) {
+      console.error('[Posts] Create post error:', error);
+      res.status(500).json({ error: "Failed to create post" });
+    }
   });
 
   app.get("/api/posts", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    // In a real implementation, this would fetch from relays
-    res.json([]);
+    try {
+      const posts = await storage.getPosts();
+      res.json(posts);
+    } catch (error) {
+      console.error('[Posts] Get posts error:', error);
+      res.status(500).json({ error: "Failed to fetch posts" });
+    }
   });
 
   // Following

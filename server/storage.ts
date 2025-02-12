@@ -1,6 +1,6 @@
-import { users, type User, type InsertUser, type Relay } from "@shared/schema";
+import { users, posts, type User, type InsertUser, type Relay, type Post } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import createMemoryStore from "memorystore";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
@@ -13,6 +13,8 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUserRelays(userId: number, relays: Relay[]): Promise<boolean>;
+  getPosts(): Promise<Post[]>;
+  createPost(content: string, userId: number): Promise<Post>;
   sessionStore: session.Store;
 }
 
@@ -54,6 +56,25 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId))
       .returning();
     return !!user;
+  }
+
+  async getPosts(): Promise<Post[]> {
+    return await db
+      .select()
+      .from(posts)
+      .orderBy(desc(posts.createdAt));
+  }
+
+  async createPost(content: string, userId: number): Promise<Post> {
+    const [post] = await db
+      .insert(posts)
+      .values({
+        content,
+        userId,
+        createdAt: new Date().toISOString(),
+      })
+      .returning();
+    return post;
   }
 }
 
