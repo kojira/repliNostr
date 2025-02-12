@@ -115,12 +115,35 @@ export function useNostr() {
   const pendingMetadata = useRef<string[]>([]);
   const [isSubscriptionReady, setIsSubscriptionReady] = useState(false);
   const subscriptionReadyRef = useRef(false);
+  const previousUserRef = useRef(user);
 
   const debugLog = useCallback((message: string, ...args: any[]) => {
     if (DEBUG) {
       console.log(`[Nostr ${new Date().toISOString()}] ${message}`, ...args);
     }
   }, []);
+
+  // rx-nostrインスタンスのリセット処理
+  const resetNostrInstance = useCallback(() => {
+    debugLog("Resetting rx-nostr instance");
+    globalRxInstance = null;
+    globalInitialized = false;
+    setInitialized(false);
+    setIsSubscriptionReady(false);
+    subscriptionReadyRef.current = false;
+    isInitialLoadComplete.current = false;
+    seenEvents.current.clear();
+    setPosts(new Map());
+  }, [debugLog]);
+
+  // ユーザー変更の監視
+  useEffect(() => {
+    if (user?.publicKey !== previousUserRef.current?.publicKey) {
+      debugLog("User changed, resetting Nostr client");
+      resetNostrInstance();
+    }
+    previousUserRef.current = user;
+  }, [user, resetNostrInstance, debugLog]);
 
   // キャッシュの有効性をチェックする関数
   const isValidCache = useCallback((pubkey: string): boolean => {
@@ -341,7 +364,7 @@ export function useNostr() {
 
   // rx-nostrの初期化
   useEffect(() => {
-    if (globalInitialized) {
+    if (globalInitialized && initialized) {
       debugLog("Using existing rx-nostr instance");
       setInitialized(true);
       setIsSubscriptionReady(true);
@@ -409,6 +432,7 @@ export function useNostr() {
                   };
                   updatePostsAndCache(event, post);
                   initialEventsReceived++;
+                  debugLog(`Received initial event: ${event.id}`);
                 }
               },
               error: (error) => {
@@ -482,7 +506,7 @@ export function useNostr() {
     };
 
     initializeNostr();
-  }, [debugLog, toast, updatePostsAndCache, user]);
+  }, [debugLog, toast, updatePostsAndCache, user, initialized]);
 
   // Create post mutation
   const createPostMutation = useMutation({
@@ -660,7 +684,7 @@ export function useNostr() {
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     ),
-    isLoadingPosts: !initialized,
+    isLoadingPosts: !initialized || !isSubscriptionReady,
     getUserMetadata: useCallback(
       (pubkey: string) => userMetadata.get(pubkey),
       [userMetadata],
