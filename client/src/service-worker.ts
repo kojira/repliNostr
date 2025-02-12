@@ -39,12 +39,7 @@ self.addEventListener('fetch', (event) => {
 
         const responseToCache = response.clone();
         caches.open(CACHE_NAME).then((cache) => {
-          // Store with correct base path
-          const url = new URL(event.request.url);
-          const cacheKey = url.pathname.startsWith(BASE_URL) 
-            ? event.request 
-            : new Request(`${BASE_URL}${url.pathname.slice(1)}`);
-          cache.put(cacheKey, responseToCache);
+          cache.put(event.request, responseToCache);
         });
 
         return response;

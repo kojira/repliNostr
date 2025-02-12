@@ -1,24 +1,16 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Page Not Found</title>
     <script>
-        // GitHub Pages SPA redirect
-        const segment = 1; // /repliNostr/
-        const l = window.location;
-        l.replace(
-            l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
-            l.pathname.split('/').slice(0, 1 + segment).join('/') + '/?/' +
-            l.pathname.slice(1).split('/').slice(segment).join('/').replace(/&/g, '~and~') +
-            (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
-            l.hash
-        );
+        // Simple redirect for GitHub Pages SPA
+        sessionStorage.redirect = location.href;
+        location.replace(location.origin + '/repliNostr/');
     </script>
 </head>
 <body>
-    <h1>ページが見つかりません</h1>
-    <p>メインページにリダイレクトします...</p>
+    <h1>Page Not Found</h1>
+    <p>Redirecting to home page...</p>
 </body>
 </html>

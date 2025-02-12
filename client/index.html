@@ -3,24 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/repliNostr/" />
     <script>
-      // GitHub Pages SPA redirect handling
+      // Handle GitHub Pages SPA redirect
       (function() {
         const redirect = sessionStorage.redirect;
         delete sessionStorage.redirect;
         if (redirect && redirect !== location.href) {
-          const segments = redirect.split('?/');
-          if (segments.length === 2) {
-            history.replaceState(null, null, '/' + segments[1].split('?')[0]);
-          }
+          const path = redirect.replace(location.origin + '/repliNostr', '');
+          history.replaceState(null, null, path);
         }
       })();
-    </script>
-    <!-- Base path for GitHub Pages -->
-    <script>
-      // Set base path based on hostname
-      const basePath = location.hostname === 'localhost' ? '/' : '/repliNostr/';
-      document.write(`<base href="${basePath}">`);
     </script>
   </head>
   <body>
