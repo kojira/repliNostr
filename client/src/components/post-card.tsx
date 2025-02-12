@@ -8,6 +8,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { memo, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useInView } from "react-intersection-observer";
 
 interface PostCardProps {
   post: Post;
@@ -15,8 +16,20 @@ interface PostCardProps {
 }
 
 function PostCard({ post, priority = false }: PostCardProps) {
-  const { getUserMetadata } = useNostr();
+  const { getUserMetadata, loadPostMetadata } = useNostr();
   const [isLoading, setIsLoading] = useState(!priority);
+  const { ref, inView } = useInView({
+    threshold: 0,
+    triggerOnce: true
+  });
+
+  // メタデータの取得
+  useEffect(() => {
+    if (inView) {
+      loadPostMetadata(post.pubkey);
+    }
+  }, [inView, post.pubkey, loadPostMetadata]);
+
   const metadata = getUserMetadata(post.pubkey);
 
   // Truncated pubkey for fallback display
@@ -59,7 +72,7 @@ function PostCard({ post, priority = false }: PostCardProps) {
   };
 
   return (
-    <Card className={cn(isLoading && "opacity-70")}>
+    <Card ref={ref} className={cn(isLoading && "opacity-70")}>
       <CardHeader className="flex flex-row items-center gap-4">
         {renderAvatar()}
         <div className="space-y-1">
