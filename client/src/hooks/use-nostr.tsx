@@ -68,6 +68,7 @@ export function useNostr() {
           throw new Error("Failed to connect to any relays");
         }
 
+        // Convert private key to proper format and get public key
         const privateKeyBytes = hexToBytes(user.privateKey);
         const pubkeyHex = getPublicKey(user.privateKey);
         console.log("Private key (hex):", user.privateKey);
@@ -88,7 +89,7 @@ export function useNostr() {
         const id = getEventHash(event);
         console.log("Event hash generated:", id);
 
-        // Sign the event
+        // Sign the event using schnorr signature
         const signature = await secp.schnorr.sign(hexToBytes(id), privateKeyBytes);
         const signatureHex = bytesToHex(signature);
 
@@ -99,7 +100,7 @@ export function useNostr() {
           sig: signatureHex
         };
 
-        console.log("Publishing signed event:", JSON.stringify(signedEvent, null, 2));
+        console.log("Signed event:", JSON.stringify(signedEvent, null, 2));
 
         // Publish to connected relays
         const activeRelayUrls = connectedRelays.map(relay => relay.url);
