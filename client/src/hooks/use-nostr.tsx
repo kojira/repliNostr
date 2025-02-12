@@ -16,7 +16,7 @@ export function useNostr() {
 
     return () => {
       if (poolRef.current) {
-        poolRef.current.close();
+        poolRef.current.close(["*"]); // Close all relay connections
       }
     };
   }, []);
@@ -44,49 +44,14 @@ export function useNostr() {
       console.log("Fetching events from relays:", readRelays);
 
       try {
-        // Create a promise to collect events
-        const eventsPromise = new Promise<any[]>((resolve, reject) => {
-          const events: any[] = [];
-          let completed = false;
+        // Create subscription
+        const filters = [{
+          kinds: [1],
+          limit: 100
+        }];
 
-          const onEvent = (event: any) => {
-            if (!completed) {
-              events.push(event);
-            }
-          };
-
-          const onEose = () => {
-            if (!completed) {
-              completed = true;
-              resolve(events);
-            }
-          };
-
-          // Subscribe to events
-          const filters = [{
-            kinds: [1],
-            limit: 100
-          }];
-
-          readRelays.forEach(url => {
-            if (poolRef.current) {
-              const relay = poolRef.current.addRelay(url);
-              relay.on('event', onEvent);
-              relay.on('eose', onEose);
-              relay.subscribe(filters);
-            }
-          });
-
-          // Set timeout for 5 seconds
-          setTimeout(() => {
-            if (!completed) {
-              completed = true;
-              resolve(events);
-            }
-          }, 5000);
-        });
-
-        const events = await eventsPromise;
+        // Get events from relays
+        const events = await poolRef.current.querySync(readRelays, filters);
         console.log("Received events:", events);
 
         // Cache events in the database
@@ -166,30 +131,8 @@ export function useNostr() {
 
           console.log("Publishing to relays:", writeRelays);
 
-          // Publish to each relay individually and log results
-          const publishPromises = writeRelays.map(async (url) => {
-            try {
-              console.log(`Attempting to publish to relay: ${url}`);
-              const relay = poolRef.current!.addRelay(url);
-              const result = await relay.publish(signedEvent);
-              console.log(`Publish result for ${url}:`, result);
-              return result;
-            } catch (error) {
-              console.error(`Failed to publish to relay ${url}:`, error);
-              throw error;
-            }
-          });
-
-          // Wait for at least one successful publish with timeout
-          const timeout = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Publish timeout")), 5000)
-          );
-
-          const results = await Promise.race([
-            Promise.any(publishPromises),
-            timeout
-          ]);
-
+          // Publish to relays
+          const results = await poolRef.current.publish(writeRelays, signedEvent);
           console.log("Successfully published to relays:", results);
 
           // Cache the event in our database
@@ -270,30 +213,8 @@ export function useNostr() {
           throw new Error("No write-enabled relays configured");
         }
 
-        // Connect and publish to relays
-        const publishPromises = writeRelays.map(async (url) => {
-          try {
-            console.log(`Attempting to publish metadata to relay: ${url}`);
-            const relay = poolRef.current!.addRelay(url);
-            const result = await relay.publish(signedEvent);
-            console.log(`Metadata publish result for ${url}:`, result);
-            return result;
-          } catch (error) {
-            console.error(`Failed to publish metadata to relay ${url}:`, error);
-            throw error;
-          }
-        });
-
-        // Wait for at least one successful publish with timeout
-        const timeout = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Publish timeout")), 5000)
-        );
-
-        const results = await Promise.race([
-          Promise.any(publishPromises),
-          timeout
-        ]);
-
+        // Publish to relays
+        const results = await poolRef.current.publish(writeRelays, signedEvent);
         console.log("Profile metadata published successfully:", results);
 
         // Update user profile in database
