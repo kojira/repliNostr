@@ -154,15 +154,6 @@ export function useNostr() {
     metadataUpdateQueue.current.add(pubkey);
     pendingMetadataRequests.current.add(pubkey);
 
-    // Set initial placeholder if not exists
-    setUserMetadata(current => {
-      const updated = new Map(current);
-      if (!updated.has(pubkey)) {
-        updated.set(pubkey, { name: `nostr:${pubkey.slice(0, 8)}` });
-      }
-      return updated;
-    });
-
     // Clear existing timeout
     if (updateTimeoutRef.current) {
       clearTimeout(updateTimeoutRef.current);
