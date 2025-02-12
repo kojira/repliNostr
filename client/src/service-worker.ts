@@ -2,12 +2,14 @@
 declare const self: ServiceWorkerGlobalScope;
 
 const CACHE_NAME = 'nostr-client-v1';
+const BASE_URL = import.meta.env.VITE_BASE_URL || '/';
 
+// Prepend base URL to paths
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/src/main.tsx',
-  '/src/index.css'
+  BASE_URL,
+  `${BASE_URL}index.html`,
+  `${BASE_URL}src/main.tsx`,
+  `${BASE_URL}src/index.css`
 ];
 
 self.addEventListener('install', (event) => {
@@ -37,7 +39,12 @@ self.addEventListener('fetch', (event) => {
 
         const responseToCache = response.clone();
         caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
+          // Store with correct base path
+          const url = new URL(event.request.url);
+          const cacheKey = url.pathname.startsWith(BASE_URL) 
+            ? event.request 
+            : new Request(`${BASE_URL}${url.pathname.slice(1)}`);
+          cache.put(cacheKey, responseToCache);
         });
 
         return response;

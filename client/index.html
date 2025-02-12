@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script>
-      // GitHub Pages用のSPAリダイレクト処理
+      // GitHub Pages SPA redirect handling
       (function() {
         const redirect = sessionStorage.redirect;
         delete sessionStorage.redirect;
@@ -16,10 +16,10 @@
         }
       })();
     </script>
-    <!-- GitHub Pages用のベースパス設定 -->
+    <!-- Dynamic base path for GitHub Pages -->
     <script>
-      // リポジトリ名をベースパスとして設定
-      const basePath = location.hostname === 'localhost' ? '/' : '/repliNostr/';
+      // Use environment variable for base path if available
+      const basePath = import.meta.env.VITE_BASE_URL || '/';
       document.write(`<base href="${basePath}">`);
     </script>
   </head>
