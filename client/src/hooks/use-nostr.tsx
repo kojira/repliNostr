@@ -1,9 +1,8 @@
 import { useMutation } from "@tanstack/react-query";
 import { Post } from "@shared/schema";
 import { useToast } from "./use-toast";
-import { createRxNostr, createRxForwardReq } from "rx-nostr";
-import { verifier, seckeySigner } from "rx-nostr-crypto";
-import { bytesToHex } from "@noble/hashes/utils";
+import { createRxNostr, createRxForwardReq, verifier, nip07Signer } from "rx-nostr";
+import { seckeySigner } from "rx-nostr-crypto";
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { RxNostr } from "rx-nostr";
 import { useAuth } from "./use-auth";
@@ -354,15 +353,23 @@ export function useNostr() {
       try {
         debugLog("Starting rx-nostr initialization");
         if (!globalRxInstance) {
-          if (!user?.privateKey) {
-            debugLog("No private key available, initializing without signer");
+          if (!user) {
+            debugLog("No user available, initializing without signer");
             globalRxInstance = createRxNostr({ verifier });
-          } else {
-            debugLog("Initializing with signer");
+          } else if (user.type === "extension") {
+            debugLog("Initializing with NIP-07 signer");
+            globalRxInstance = createRxNostr({
+              verifier,
+              signer: nip07Signer()
+            });
+          } else if (user.type === "generated" && user.privateKey) {
+            debugLog("Initializing with private key signer");
             globalRxInstance = createRxNostr({
               verifier,
               signer: seckeySigner(user.privateKey)
             });
+          } else {
+            throw new Error("Invalid user configuration");
           }
           globalRxInstance.setDefaultRelays(DEFAULT_RELAYS);
           globalInitialized = true;
@@ -475,12 +482,12 @@ export function useNostr() {
     };
 
     initializeNostr();
-  }, [debugLog, toast, updatePostsAndCache, user?.privateKey]);
+  }, [debugLog, toast, updatePostsAndCache, user]);
 
   // Create post mutation
   const createPostMutation = useMutation({
     mutationFn: async (content: string) => {
-      if (!user?.privateKey || !globalRxInstance) {
+      if (!user || !globalRxInstance) {
         throw new Error("Not ready to post");
       }
 
@@ -506,10 +513,9 @@ export function useNostr() {
               debugLog(`Post sent successfully to ${packet.from}`);
               successCount++;
 
-              // Post is already signed, so we can create it immediately
               const post: Post = {
                 id: 0,
-                userId: user.id,
+                userId: 0,
                 content: event.content,
                 createdAt: new Date(event.created_at * 1000).toISOString(),
                 nostrEventId: event.id,
@@ -522,7 +528,6 @@ export function useNostr() {
               };
 
               if (successCount === 1) {
-                // Resolve with the first success
                 resolve(post);
               }
             } else {
@@ -545,7 +550,6 @@ export function useNostr() {
       });
     },
     onSuccess: (post) => {
-      // Only add posts that have both an event ID and signature
       if (post.nostrEventId && post.signature) {
         setPosts((currentPosts) => {
           const updatedPosts = new Map(currentPosts);
