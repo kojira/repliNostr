@@ -33,7 +33,7 @@ export default function Navbar() {
             <div className="mt-4 space-y-6">
               <UserProfile user={user} />
               <div>
-                <SheetTitle className="mb-4">リレー設定</SheetTitle>
+                <h2 className="text-lg font-semibold mb-4">リレー設定</h2>
                 <RelaySettings />
               </div>
               <Button 
