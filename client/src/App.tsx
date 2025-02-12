@@ -8,25 +8,17 @@ import AuthPage from "@/pages/auth-page";
 import HomePage from "@/pages/home-page";
 import { ProtectedRoute } from "./lib/protected-route";
 
-function Router() {
-  return (
-    <Switch>
-      <ProtectedRoute path="/" component={HomePage} />
-      <Route path="/auth" component={AuthPage} />
-      <Route component={NotFound} />
-    </Switch>
-  );
-}
-
-function App() {
+export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Router />
+        <Switch>
+          <ProtectedRoute path="/" component={HomePage} />
+          <Route path="/auth" component={AuthPage} />
+          <Route component={NotFound} />
+        </Switch>
         <Toaster />
       </AuthProvider>
     </QueryClientProvider>
   );
 }
-
-export default App;

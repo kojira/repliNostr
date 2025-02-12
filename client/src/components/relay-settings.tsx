@@ -26,11 +26,11 @@ export default function RelaySettings({ relays, onSave, isSaving = false }: Rela
         read: true,
         write: true
       });
-      
+
       if (localRelays.some(relay => relay.url === newRelayUrl)) {
         toast({
-          title: "Error",
-          description: "This relay is already added",
+          title: "エラー",
+          description: "このリレーは既に追加されています",
           variant: "destructive",
         });
         return;
@@ -40,8 +40,8 @@ export default function RelaySettings({ relays, onSave, isSaving = false }: Rela
       setNewRelayUrl("");
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Invalid relay URL",
+        title: "エラー",
+        description: "無効なリレーURLです",
         variant: "destructive",
       });
     }
@@ -67,13 +67,13 @@ export default function RelaySettings({ relays, onSave, isSaving = false }: Rela
     try {
       await onSave(localRelays);
       toast({
-        title: "Success",
-        description: "Relay settings saved successfully",
+        title: "成功",
+        description: "リレー設定を保存しました",
       });
     } catch (error) {
       toast({
-        title: "Error",
-        description: "Failed to save relay settings",
+        title: "エラー",
+        description: "リレー設定の保存に失敗しました",
         variant: "destructive",
       });
     }
@@ -82,7 +82,7 @@ export default function RelaySettings({ relays, onSave, isSaving = false }: Rela
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Relay Settings</CardTitle>
+        <CardTitle>リレー設定</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
@@ -94,7 +94,7 @@ export default function RelaySettings({ relays, onSave, isSaving = false }: Rela
             />
             <Button onClick={addRelay}>
               <Plus className="h-4 w-4 mr-2" />
-              Add Relay
+              リレーを追加
             </Button>
           </div>
 
@@ -108,14 +108,14 @@ export default function RelaySettings({ relays, onSave, isSaving = false }: Rela
                       checked={relay.read}
                       onCheckedChange={() => toggleRead(relay.url)}
                     />
-                    <Label>Read</Label>
+                    <Label>読み取り</Label>
                   </div>
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={relay.write}
                       onCheckedChange={() => toggleWrite(relay.url)}
                     />
-                    <Label>Write</Label>
+                    <Label>書き込み</Label>
                   </div>
                   <Button
                     variant="ghost"
@@ -135,7 +135,7 @@ export default function RelaySettings({ relays, onSave, isSaving = false }: Rela
             className="w-full"
           >
             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Save Changes
+            変更を保存
           </Button>
         </div>
       </CardContent>
