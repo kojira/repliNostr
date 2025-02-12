@@ -21,10 +21,14 @@ const DEFAULT_RELAYS = [
 // ローカルストレージのキー
 const METADATA_CACHE_KEY = 'nostr_metadata_cache';
 const METADATA_TIMESTAMP_KEY = 'nostr_metadata_timestamp';
+const EVENTS_CACHE_KEY = 'nostr_events_cache';
+const EVENTS_TIMESTAMP_KEY = 'nostr_events_timestamp';
 const CACHE_TTL = 1000 * 60 * 60; // 1時間
+const EVENTS_CACHE_TTL = 1000 * 60 * 5; // 5分
 
 // メモリ内キャッシュ
 const metadataMemoryCache = new Map<string, { data: UserMetadata; timestamp: number; error?: string }>();
+const eventsMemoryCache = new Map<string, { data: Post; timestamp: number }>();
 
 export function useNostr() {
   const { toast } = useToast();
@@ -35,19 +39,65 @@ export function useNostr() {
   const pendingMetadataRequests = useRef<Set<string>>(new Set());
   const metadataUpdateQueue = useRef<Set<string>>(new Set());
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const batchSize = 50; // バッチサイズを増やして初期ロード時間を短縮
+  const batchSize = 50;
   const retryCount = useRef<Map<string, number>>(new Map());
   const MAX_RETRIES = 3;
   const [isSubscriptionReady, setIsSubscriptionReady] = useState(false);
   const activeSubscriptions = useRef<Set<string>>(new Set());
-  const DEBUG = true; // デバッグログの有効化
+  const seenEvents = useRef<Set<string>>(new Set());
+  const DEBUG = true;
 
-  // Debug logger
   const debugLog = useCallback((message: string, ...args: any[]) => {
     if (DEBUG) {
       console.log(`[Nostr] ${message}`, ...args);
     }
   }, []);
+
+  // Load cached events on mount
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem(EVENTS_CACHE_KEY);
+      const timestamp = localStorage.getItem(EVENTS_TIMESTAMP_KEY);
+
+      if (cached && timestamp) {
+        const parsedCache = JSON.parse(cached);
+        const parsedTimestamp = parseInt(timestamp, 10);
+
+        if (Date.now() - parsedTimestamp < EVENTS_CACHE_TTL) {
+          const entries = Object.entries(parsedCache);
+          entries.forEach(([key, value]) => {
+            eventsMemoryCache.set(key, {
+              data: value as Post,
+              timestamp: parsedTimestamp
+            });
+            seenEvents.current.add(key);
+          });
+          setPosts(new Map(entries.map(([key, value]) => [key, value as Post])));
+          debugLog(`Loaded ${entries.length} events from cache`);
+        }
+      }
+    } catch (error) {
+      debugLog('Error loading events cache:', error);
+    }
+  }, [debugLog]);
+
+  // Save events to cache periodically
+  useEffect(() => {
+    const saveInterval = setInterval(() => {
+      try {
+        if (posts.size > 0) {
+          const eventsObject = Object.fromEntries(posts);
+          localStorage.setItem(EVENTS_CACHE_KEY, JSON.stringify(eventsObject));
+          localStorage.setItem(EVENTS_TIMESTAMP_KEY, Date.now().toString());
+          debugLog(`Saved ${posts.size} events to cache`);
+        }
+      } catch (error) {
+        debugLog('Error saving events cache:', error);
+      }
+    }, 60000); // 1分ごと
+
+    return () => clearInterval(saveInterval);
+  }, [posts, debugLog]);
 
   // メタデータのクリーンアップ
   const cleanupMetadataRequests = useCallback(() => {
@@ -284,7 +334,7 @@ export function useNostr() {
     return () => clearInterval(saveInterval);
   }, [userMetadata]);
 
-  // Initialize rx-nostr immediately
+  // Initialize rx-nostr and subscribe to events
   useEffect(() => {
     if (initialized || rxRef.current) {
       return;
@@ -296,7 +346,6 @@ export function useNostr() {
       rxRef.current.setDefaultRelays(DEFAULT_RELAYS);
       setInitialized(true);
 
-      // Subscribe to new posts from relays
       const fetchFromRelays = async () => {
         try {
           const filter = {
@@ -316,25 +365,39 @@ export function useNostr() {
             .subscribe({
               next: ({ event }) => {
                 if (!activeSubscriptions.current.has(subscriptionId)) return;
-                debugLog(`Received post from ${event.pubkey}`);
+
+                // Skip if we've already seen this event
+                if (seenEvents.current.has(event.id)) {
+                  debugLog(`Skipping duplicate event: ${event.id}`);
+                  return;
+                }
+
+                debugLog(`Received new post from ${event.pubkey}`);
+                seenEvents.current.add(event.id);
+
+                const post: Post = {
+                  id: 0,
+                  userId: 0,
+                  content: event.content,
+                  createdAt: new Date(event.created_at * 1000).toISOString(),
+                  nostrEventId: event.id,
+                  pubkey: event.pubkey,
+                  signature: event.sig,
+                  metadata: {
+                    tags: event.tags || [],
+                    relays: DEFAULT_RELAYS
+                  }
+                };
+
+                // Update memory cache
+                eventsMemoryCache.set(event.id, {
+                  data: post,
+                  timestamp: Date.now()
+                });
 
                 setPosts(currentPosts => {
-                  if (currentPosts.has(event.id)) return currentPosts;
-
                   const updatedPosts = new Map(currentPosts);
-                  updatedPosts.set(event.id, {
-                    id: 0,
-                    userId: 0,
-                    content: event.content,
-                    createdAt: new Date(event.created_at * 1000).toISOString(),
-                    nostrEventId: event.id,
-                    pubkey: event.pubkey,
-                    signature: event.sig,
-                    metadata: {
-                      tags: event.tags || [],
-                      relays: DEFAULT_RELAYS
-                    }
-                  });
+                  updatedPosts.set(event.id, post);
                   return updatedPosts;
                 });
 
@@ -395,9 +458,10 @@ export function useNostr() {
         rxRef.current = null;
         setInitialized(false);
         setIsSubscriptionReady(false);
+        seenEvents.current.clear();
       }
     };
-  }, [cleanupMetadataRequests, toast]);
+  }, [cleanupMetadataRequests, toast, debugLog]);
 
 
   const createPostMutation = useMutation({
