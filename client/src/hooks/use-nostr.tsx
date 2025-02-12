@@ -72,17 +72,33 @@ const storage = {
     return cache[pubkey];
   },
 
+  // 期限切れのキャッシュを削除し、有効なキャッシュのみを返す
   clearExpiredMetadata() {
     const now = Date.now();
     const cache = this.loadAllMetadata();
     const validEntries = Object.entries(cache).filter(
-      ([, value]) => now - value.timestamp < CACHE_TTL,
+      ([, value]) => now - value.timestamp < CACHE_TTL && !value.error
     );
     const newCache = Object.fromEntries(validEntries);
     localStorage.setItem(METADATA_CACHE_KEY, JSON.stringify(newCache));
     localStorage.setItem(METADATA_TIMESTAMP_KEY, now.toString());
     return newCache;
   },
+
+  // キャッシュの更新（既存のエントリがある場合は上書き）
+  updateMetadata(
+    pubkey: string,
+    data: UserMetadata,
+    error?: string
+  ) {
+    const cacheEntry = {
+      data,
+      timestamp: Date.now(),
+      error,
+    };
+    this.saveMetadata(pubkey, cacheEntry);
+    return cacheEntry;
+  }
 };
 
 export function useNostr() {
@@ -108,9 +124,11 @@ export function useNostr() {
   // キャッシュの有効性をチェックする関数
   const isValidCache = useCallback((pubkey: string): boolean => {
     const cached = storage.loadMetadata(pubkey);
-    return cached && 
-           Date.now() - cached.timestamp < CACHE_TTL && 
-           !cached.error;
+    return (
+      cached &&
+      Date.now() - cached.timestamp < CACHE_TTL &&
+      !cached.error
+    );
   }, []);
 
   // キャッシュからメタデータを適用する関数
@@ -122,7 +140,9 @@ export function useNostr() {
         updated.set(pubkey, cached.data);
         return updated;
       });
+      return true;
     }
+    return false;
   }, []);
 
   // メタデータ取得の処理 - 1件ずつシリアルに処理
@@ -141,15 +161,16 @@ export function useNostr() {
         if (isValidCache(pubkey)) {
           debugLog(`Using cached metadata for ${pubkey}`);
           applyMetadataFromCache(pubkey);
-          pendingMetadata.current.shift(); // キューから削除
+          pendingMetadata.current.shift();
           continue;
         }
 
+        // rx-nostrの準備状態をチェック
         if (!globalRxInstance || !subscriptionReadyRef.current) {
           debugLog(
             `Metadata load skipped: rxInstance=${!!globalRxInstance}, ready=${subscriptionReadyRef.current}`,
           );
-          break;
+          break; // 準備が整っていない場合は処理を中断
         }
 
         debugLog(`Processing metadata for ${pubkey}`);
@@ -169,14 +190,16 @@ export function useNostr() {
                 debugLog(`Metadata request timeout for ${pubkey}`);
                 // タイムアウト時はデフォルト値を設定
                 const defaultMetadata = {
-                  data: { name: `nostr:${pubkey.slice(0, 8)}` },
-                  timestamp: Date.now(),
-                  error: "Metadata fetch timeout",
+                  name: `nostr:${pubkey.slice(0, 8)}`,
                 };
-                storage.saveMetadata(pubkey, defaultMetadata);
+                const cacheEntry = storage.updateMetadata(
+                  pubkey,
+                  defaultMetadata,
+                  "Metadata fetch timeout"
+                );
                 setUserMetadata((current) => {
                   const updated = new Map(current);
-                  updated.set(pubkey, defaultMetadata.data);
+                  updated.set(pubkey, defaultMetadata);
                   return updated;
                 });
                 isCompleted = true;
@@ -197,11 +220,8 @@ export function useNostr() {
                     about: metadata.about,
                   };
 
-                  const cacheEntry = {
-                    data: processedMetadata,
-                    timestamp: Date.now(),
-                  };
-                  storage.saveMetadata(event.pubkey, cacheEntry);
+                  // キャッシュを更新
+                  storage.updateMetadata(event.pubkey, processedMetadata);
 
                   setUserMetadata((current) => {
                     const updated = new Map(current);
