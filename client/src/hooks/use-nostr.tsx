@@ -13,10 +13,7 @@ export function useNostr() {
 
   // Initialize rx-nostr on mount
   useEffect(() => {
-    rxRef.current = createRxNostr({
-      defaultRelays: []  // 初期リレーは空に設定
-    });
-
+    rxRef.current = createRxNostr();
     return () => {
       if (rxRef.current) {
         rxRef.current.dispose();
@@ -38,7 +35,7 @@ export function useNostr() {
       // Get read-enabled relay URLs
       const readRelays = user.relays
         .filter(relay => relay.read)
-        .map(relay => ({ url: relay.url }));
+        .map(relay => relay.url);
 
       if (readRelays.length === 0) {
         throw new Error("No read-enabled relays configured");
@@ -48,7 +45,7 @@ export function useNostr() {
 
       try {
         // Set relays for this query
-        rxRef.current.switchRelays(readRelays);
+        rxRef.current.setRelays(readRelays);
 
         // Create filter
         const filter = {
@@ -61,14 +58,12 @@ export function useNostr() {
         // Create a promise to collect events
         const eventsPromise = new Promise<any[]>((resolve) => {
           const events: any[] = [];
-          const subscription = rxRef.current!.observe([filter])
-            .next((packet) => {
-              if (packet.type === 'event') {
-                events.push(packet.event);
-              }
-            })
+          const subscription = rxRef.current!
+            .pipe(filter)
             .subscribe({
-              next: () => {},
+              next: ({ event }) => {
+                events.push(event);
+              },
               error: (error) => {
                 console.error("Error receiving events:", error);
               }
@@ -93,7 +88,7 @@ export function useNostr() {
               content: event.content,
               sig: event.sig,
               tags: event.tags,
-              relays: readRelays.map(r => r.url)
+              relays: readRelays
             });
             return await res.json();
           } catch (error) {
@@ -126,7 +121,7 @@ export function useNostr() {
         // Get write-enabled relay URLs
         const writeRelays = user.relays
           .filter(relay => relay.write)
-          .map(relay => ({ url: relay.url }));
+          .map(relay => relay.url);
 
         if (writeRelays.length === 0) {
           throw new Error("No write-enabled relays configured");
@@ -136,7 +131,7 @@ export function useNostr() {
         if (!rxRef.current) {
           throw new Error("rx-nostr not initialized");
         }
-        rxRef.current.switchRelays(writeRelays);
+        rxRef.current.setRelays(writeRelays);
 
         // Create event
         const event = {
@@ -159,24 +154,7 @@ export function useNostr() {
         };
 
         // Publish event
-        const observable = rxRef.current.send(signedEvent);
-        await new Promise((resolve, reject) => {
-          const subscription = observable.subscribe({
-            next: (packet) => {
-              if (packet.type === 'ok') {
-                resolve(packet);
-              }
-            },
-            error: (error) => reject(error),
-            complete: () => resolve(null)
-          });
-
-          // Timeout after 5 seconds
-          setTimeout(() => {
-            subscription.unsubscribe();
-            resolve(null);
-          }, 5000);
-        });
+        await rxRef.current.send(signedEvent);
 
         // Cache the event in our database
         const cacheRes = await apiRequest("POST", "/api/posts/cache", {
@@ -185,7 +163,7 @@ export function useNostr() {
           content: signedEvent.content,
           sig: signedEvent.sig,
           tags: signedEvent.tags,
-          relays: writeRelays.map(r => r.url)
+          relays: writeRelays
         });
 
         return await cacheRes.json();
@@ -224,7 +202,7 @@ export function useNostr() {
         // Get write-enabled relays
         const writeRelays = user.relays
           .filter(relay => relay.write)
-          .map(relay => ({ url: relay.url }));
+          .map(relay => relay.url);
 
         if (writeRelays.length === 0) {
           throw new Error("No write-enabled relays configured");
@@ -233,7 +211,7 @@ export function useNostr() {
         if (!rxRef.current) {
           throw new Error("rx-nostr not initialized");
         }
-        rxRef.current.switchRelays(writeRelays);
+        rxRef.current.setRelays(writeRelays);
 
         // Create event
         const event = {
@@ -256,24 +234,7 @@ export function useNostr() {
         };
 
         // Publish event
-        const observable = rxRef.current.send(signedEvent);
-        await new Promise((resolve, reject) => {
-          const subscription = observable.subscribe({
-            next: (packet) => {
-              if (packet.type === 'ok') {
-                resolve(packet);
-              }
-            },
-            error: (error) => reject(error),
-            complete: () => resolve(null)
-          });
-
-          // Timeout after 5 seconds
-          setTimeout(() => {
-            subscription.unsubscribe();
-            resolve(null);
-          }, 5000);
-        });
+        await rxRef.current.send(signedEvent);
 
         // Update user profile in database
         await apiRequest("POST", "/api/profile", profile);
