@@ -1,0 +1,53 @@
+Initializing rx-nostr...
+Setting default relays: 
+(2) ["wss://r.kojira.io", "wss://x.kojira.io"]
+Starting to fetch events from relays...
+Created forward request with filter: 
+Object {kinds: Array(1), limit: 100, since: 1739276805}
+Emitting filter to start subscription
+Initializing rx-nostr...
+Setting default relays: 
+(2) ["wss://r.kojira.io", "wss://x.kojira.io"]
+Starting to fetch events from relays...
+Created forward request with filter: 
+Object {kinds: Array(1), limit: 100, since: 1739276805}
+Emitting filter to start subscription
+Initializing rx-nostr...
+Setting default relays: 
+(2) ["wss://r.kojira.io", "wss://x.kojira.io"]
+Starting to fetch events from relays...
+Created forward request with filter: 
+Object {kinds: Array(1), limit: 100, since: 1739276805}
+Emitting filter to start subscription
+Initializing rx-nostr...
+Setting default relays: 
+(2) ["wss://r.kojira.io", "wss://x.kojira.io"]
+Starting to fetch events from relays...
+Created forward request with filter: 
+Object {kinds: Array(1), limit: 100, since: 1739276805}
+Emitting filter to start subscription
+Initializing rx-nostr...
+Setting default relays: 
+(2) ["wss://r.kojira.io", "wss://x.kojira.io"]
+Starting to fetch events from relays...
+Created forward request with filter: 
+Object {kinds: Array(1), limit: 100, since: 1739276805}
+Emitting filter to start subscription
+Initializing rx-nostr...
+Setting default relays: 
+(2) ["wss://r.kojira.io", "wss://x.kojira.io"]
+Starting to fetch events from relays...
+Created forward request with filter: 
+Object {kinds: Array(1), limit: 100, since: 1739276805}
+Emitting filter to start subscription
+Initializing rx-nostr...
+Setting default relays: 
+(2) ["wss://r.kojira.io", "wss://x.kojira.io"]
+Starting to fetch events from relays...
+Created forward request with filter: 
+Object {kinds: Array(1), limit: 100, since: 1739276805}
+Emitting filter to start subscription
+Initializing rx-nostr...
+Setting default relays: 
+(2) ["wss://r.kojira.io", "wss://x.kojira.io"]
+Starting to fetch events from relays...
