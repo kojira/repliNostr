@@ -41,7 +41,6 @@ export function useNostr() {
   const [userMetadata, setUserMetadata] = useState<Map<string, UserMetadata>>(new Map());
   const pendingMetadataRequests = useRef<Set<string>>(new Set());
   const metadataUpdateQueue = useRef<Set<string>>(new Set());
-  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const batchSize = 5; // バッチサイズを5に削減
   const retryCount = useRef<Map<string, number>>(new Map());
   const MAX_RETRIES = 3;
@@ -55,6 +54,30 @@ export function useNostr() {
     if (DEBUG) {
       console.log(`[Nostr] ${message}`, ...args);
     }
+  }, []);
+
+  // キャッシュからメタデータを取得または更新キューに追加
+  const loadOrQueueMetadata = useCallback((pubkey: string) => {
+    const memCached = metadataMemoryCache.get(pubkey);
+    if (memCached && (Date.now() - memCached.timestamp < CACHE_TTL)) {
+      if (!memCached.error) {
+        setUserMetadata(current => {
+          if (!current.has(pubkey)) {
+            const updated = new Map(current);
+            updated.set(pubkey, memCached.data);
+            return updated;
+          }
+          return current;
+        });
+        return true;
+      }
+    }
+
+    if (!pendingMetadataRequests.current.has(pubkey) && !metadataUpdateQueue.current.has(pubkey)) {
+      metadataUpdateQueue.current.add(pubkey);
+      return false;
+    }
+    return false;
   }, []);
 
   // Load cached events on mount
@@ -84,11 +107,12 @@ export function useNostr() {
           setPosts(new Map(entries.map(([key, value]) => [key, value as Post])));
           debugLog(`Loaded ${entries.length} events from cache`);
 
-          // キャッシュされたイベントのメタデータを取得
-          entries.forEach(([_, post]) => {
-            const { pubkey } = post as Post;
-            if (!userMetadata.has(pubkey) && !metadataUpdateQueue.current.has(pubkey)) {
-              metadataUpdateQueue.current.add(pubkey);
+          // キャッシュされたイベントのメタデータを処理
+          const uniquePubkeys = new Set(entries.map(([_, post]) => (post as Post).pubkey));
+          debugLog(`Processing metadata for ${uniquePubkeys.size} unique pubkeys`);
+          uniquePubkeys.forEach(pubkey => {
+            if (!loadOrQueueMetadata(pubkey)) {
+              debugLog(`Queued metadata update for ${pubkey}`);
             }
           });
 
@@ -101,7 +125,7 @@ export function useNostr() {
     } catch (error) {
       debugLog('Error loading events cache:', error);
     }
-  }, []);
+  }, [loadOrQueueMetadata]);
 
   // Process metadata updates in batches
   const processBatchMetadataUpdate = useCallback(() => {
@@ -209,7 +233,7 @@ export function useNostr() {
       });
 
     rxReq.emit(filter);
-    debugLog(`Emitted metadata filter for ${pubkey}`);
+    debugLog(`Emitted filter for subscription ${pubkey}`);
 
     return () => {
       subscription.unsubscribe();
@@ -217,30 +241,6 @@ export function useNostr() {
       debugLog(`Cleaned up metadata request for ${pubkey}`);
     };
   }, [isSubscriptionReady, debugLog]);
-
-  // メタデータの更新をキューに追加
-  const queueMetadataUpdate = useCallback((pubkey: string) => {
-    if (!globalRxInstance || !isSubscriptionReady) return;
-
-    const memCached = metadataMemoryCache.get(pubkey);
-    if (memCached && (Date.now() - memCached.timestamp < CACHE_TTL)) {
-      if (!memCached.error) {
-        if (!userMetadata.has(pubkey)) {
-          setUserMetadata(current => {
-            const updated = new Map(current);
-            updated.set(pubkey, memCached.data);
-            return updated;
-          });
-        }
-        return;
-      }
-    }
-
-    if (!pendingMetadataRequests.current.has(pubkey) && !metadataUpdateQueue.current.has(pubkey)) {
-      metadataUpdateQueue.current.add(pubkey);
-      processBatchMetadataUpdate();
-    }
-  }, [userMetadata, processBatchMetadataUpdate, isSubscriptionReady]);
 
   // Initialize rx-nostr once
   useEffect(() => {
@@ -341,8 +341,7 @@ export function useNostr() {
             return updatedPosts;
           });
 
-          // イベント処理時にメタデータ取得をキューに追加
-          queueMetadataUpdate(event.pubkey);
+          loadOrQueueMetadata(event.pubkey);
         };
 
         // 継続的なサブスクリプションを設定
@@ -502,9 +501,9 @@ export function useNostr() {
       }
 
       if (!userMetadata.has(pubkey)) {
-        queueMetadataUpdate(pubkey);
+        loadOrQueueMetadata(pubkey);
       }
       return userMetadata.get(pubkey);
-    }, [userMetadata, queueMetadataUpdate])
+    }, [userMetadata, loadOrQueueMetadata])
   };
 }
