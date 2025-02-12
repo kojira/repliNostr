@@ -54,6 +54,7 @@ export function useNostr() {
   const seenEvents = useRef<Set<string>>(new Set());
   const lastEventTimestamp = useRef<number>(0);
   const isInitialLoadComplete = useRef(false);
+  const pendingBatches = useRef<Set<string>>(new Set());
 
   const debugLog = useCallback((message: string, ...args: any[]) => {
     if (DEBUG) {
@@ -177,13 +178,50 @@ export function useNostr() {
     }
   }, [posts, debugLog]);
 
+  // メタデータ取得の最適化されたインターフェース
+  const loadPostMetadata = useCallback(
+    (pubkey: string) => {
+      if (!globalRxInstance || !subscriptionReadyRef.current) {
+        debugLog(
+          `Metadata load skipped: rxInstance=${!!globalRxInstance}, ready=${subscriptionReadyRef.current}`,
+        );
+        return;
+      }
+
+      // キャッシュをチェック
+      const memCached = metadataMemoryCache.get(pubkey);
+      if (memCached && Date.now() - memCached.timestamp < CACHE_TTL) {
+        debugLog(`Using cached metadata for ${pubkey}`);
+        if (!memCached.error) {
+          setUserMetadata((current) => {
+            const updated = new Map(current);
+            updated.set(pubkey, memCached.data);
+            return updated;
+          });
+        }
+        return;
+      }
+
+      // 非同期でバッチ処理を開始
+      if (!isProcessingBatch && !pendingBatches.current.has(pubkey)) {
+        pendingBatches.current.add(pubkey);
+        processBatchMetadataUpdate()
+          .catch((error) => debugLog("Error in metadata update:", error))
+          .finally(() => pendingBatches.current.delete(pubkey));
+      }
+    },
+    [debugLog, processBatchMetadataUpdate],
+  );
+
   // イベントとキャッシュの更新
   const updatePostsAndCache = useCallback(
     (event: any, post: Post) => {
       debugLog(`Processing event: ${event.id} from ${event.pubkey}`);
 
       if (!isInitialLoadComplete.current) {
-        debugLog(`Initial load not complete, skipping metadata for ${event.pubkey}`);
+        debugLog(
+          `Initial load not complete, skipping metadata for ${event.pubkey}`,
+        );
         return;
       }
 
@@ -210,16 +248,12 @@ export function useNostr() {
           updated.set(event.pubkey, cachedMetadata.data);
           return updated;
         });
-      }
-
-      // メタデータ更新処理を非同期で開始
-      if (!isProcessingBatch) {
-        processBatchMetadataUpdate().catch((error) =>
-          debugLog("Error in metadata update:", error),
-        );
+      } else {
+        // メタデータが必要な場合は非同期で取得
+        loadPostMetadata(event.pubkey);
       }
     },
-    [debugLog, processBatchMetadataUpdate],
+    [debugLog, loadPostMetadata],
   );
 
   // rx-nostrの初期化
@@ -353,7 +387,6 @@ export function useNostr() {
     }
   }, []);
 
-
   // キャッシュからの初期読み込み
   useEffect(() => {
     try {
@@ -402,5 +435,6 @@ export function useNostr() {
       },
       [userMetadata],
     ),
+    loadPostMetadata,
   };
 }
