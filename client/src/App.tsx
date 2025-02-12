@@ -13,8 +13,8 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <Switch>
-          <ProtectedRoute path="/" component={HomePage} />
           <Route path="/auth" component={AuthPage} />
+          <ProtectedRoute path="/" component={HomePage} />
           <Route component={NotFound} />
         </Switch>
         <Toaster />
