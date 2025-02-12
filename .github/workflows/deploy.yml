@@ -28,6 +28,7 @@ jobs:
           export VITE_BASE_URL="/repliNostr/"
           export VITE_ASSET_URL="/repliNostr/"
           export BASE_URL="/repliNostr/"
+          export BASE="/repliNostr/"
           # Build the project
           npm run build
           # Create public directory and copy build output
