@@ -105,7 +105,7 @@ export default function RelaySettings({
             />
             <Button onClick={addRelay}>
               <Plus className="h-4 w-4 mr-2" />
-              リレーを追加
+              追加
             </Button>
           </div>
 
