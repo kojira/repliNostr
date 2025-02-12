@@ -2,7 +2,7 @@
 declare const self: ServiceWorkerGlobalScope;
 
 const CACHE_NAME = 'nostr-client-v1';
-const BASE_URL = import.meta.env.VITE_BASE_URL || '/';
+const BASE_URL = '/repliNostr/';
 
 // Prepend base URL to paths
 const STATIC_ASSETS = [

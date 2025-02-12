@@ -16,10 +16,10 @@
         }
       })();
     </script>
-    <!-- Dynamic base path for GitHub Pages -->
+    <!-- Base path for GitHub Pages -->
     <script>
-      // Use environment variable for base path if available
-      const basePath = import.meta.env.VITE_BASE_URL || '/';
+      // Set base path based on hostname
+      const basePath = location.hostname === 'localhost' ? '/' : '/repliNostr/';
       document.write(`<base href="${basePath}">`);
     </script>
   </head>
