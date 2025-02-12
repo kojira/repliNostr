@@ -16,6 +16,12 @@
         }
       })();
     </script>
+    <!-- GitHub Pages用のベースパス設定 -->
+    <script>
+      // リポジトリ名をベースパスとして設定
+      const basePath = location.hostname === 'localhost' ? '/' : '/repliNostr/';
+      document.write(`<base href="${basePath}">`);
+    </script>
   </head>
   <body>
     <div id="root"></div>
