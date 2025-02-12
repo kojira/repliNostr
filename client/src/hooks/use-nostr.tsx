@@ -103,6 +103,12 @@ export function useNostr() {
       return;
     }
 
+    // Skip if pubkey is already in the queue
+    if (metadataUpdateQueue.current.has(pubkey)) {
+      console.log(`[Nostr] Metadata update already queued for ${pubkey}`);
+      return;
+    }
+
     console.log(`[Nostr] Queueing metadata update for ${pubkey}`);
     metadataUpdateQueue.current.add(pubkey);
     pendingMetadataRequests.current.add(pubkey);
@@ -116,7 +122,7 @@ export function useNostr() {
     updateTimeoutRef.current = setTimeout(() => {
       processBatchMetadataUpdate();
       updateTimeoutRef.current = null;
-    }, 100); // 100ms後にバッチ処理を実行
+    }, 500); // バッチ処理の間隔を500msに増やして重複を減らす
   }, [userMetadata, processBatchMetadataUpdate]);
 
   // Load cached metadata on mount
@@ -131,7 +137,11 @@ export function useNostr() {
 
         // Check if cache is still valid
         if (Date.now() - parsedTimestamp < CACHE_TTL) {
+          console.log("[Nostr] Loading cached metadata...");
           setUserMetadata(new Map(Object.entries(parsedCache)));
+          console.log("[Nostr] Cached metadata loaded successfully");
+        } else {
+          console.log("[Nostr] Cached metadata is stale, will fetch fresh data");
         }
       }
     } catch (error) {
@@ -145,6 +155,7 @@ export function useNostr() {
       const metadataObject = Object.fromEntries(userMetadata);
       localStorage.setItem(METADATA_CACHE_KEY, JSON.stringify(metadataObject));
       localStorage.setItem(METADATA_TIMESTAMP_KEY, Date.now().toString());
+      console.log("[Nostr] Metadata cache updated");
     } catch (error) {
       console.error("[Nostr] Failed to cache metadata:", error);
     }
