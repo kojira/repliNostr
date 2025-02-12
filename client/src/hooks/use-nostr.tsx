@@ -3,7 +3,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Post, User } from "@shared/schema";
 import { useToast } from "./use-toast";
 import { createRxNostr } from 'rx-nostr';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
+import { bytesToHex } from '@noble/hashes/utils';
 import { useEffect, useRef } from "react";
 import type { RxNostr } from 'rx-nostr';
 
@@ -48,7 +48,7 @@ export function useNostr() {
 
       try {
         // Set relays for this query
-        rxRef.current.setDefaultRelays(readRelays);
+        rxRef.current.switchRelays(readRelays);
 
         // Create filter
         const filter = {
@@ -61,11 +61,16 @@ export function useNostr() {
         // Create a promise to collect events
         const eventsPromise = new Promise<any[]>((resolve) => {
           const events: any[] = [];
-          const subscription = rxRef.current!
-            .subscribe([filter])
-            .subscribe((message) => {
-              if (message.type === 'event') {
-                events.push(message.event);
+          const subscription = rxRef.current!.observe([filter])
+            .next((packet) => {
+              if (packet.type === 'event') {
+                events.push(packet.event);
+              }
+            })
+            .subscribe({
+              next: () => {},
+              error: (error) => {
+                console.error("Error receiving events:", error);
               }
             });
 
@@ -131,7 +136,7 @@ export function useNostr() {
         if (!rxRef.current) {
           throw new Error("rx-nostr not initialized");
         }
-        rxRef.current.setDefaultRelays(writeRelays);
+        rxRef.current.switchRelays(writeRelays);
 
         // Create event
         const event = {
@@ -154,7 +159,24 @@ export function useNostr() {
         };
 
         // Publish event
-        await rxRef.current.publish(signedEvent);
+        const observable = rxRef.current.send(signedEvent);
+        await new Promise((resolve, reject) => {
+          const subscription = observable.subscribe({
+            next: (packet) => {
+              if (packet.type === 'ok') {
+                resolve(packet);
+              }
+            },
+            error: (error) => reject(error),
+            complete: () => resolve(null)
+          });
+
+          // Timeout after 5 seconds
+          setTimeout(() => {
+            subscription.unsubscribe();
+            resolve(null);
+          }, 5000);
+        });
 
         // Cache the event in our database
         const cacheRes = await apiRequest("POST", "/api/posts/cache", {
@@ -211,7 +233,7 @@ export function useNostr() {
         if (!rxRef.current) {
           throw new Error("rx-nostr not initialized");
         }
-        rxRef.current.setDefaultRelays(writeRelays);
+        rxRef.current.switchRelays(writeRelays);
 
         // Create event
         const event = {
@@ -234,7 +256,24 @@ export function useNostr() {
         };
 
         // Publish event
-        await rxRef.current.publish(signedEvent);
+        const observable = rxRef.current.send(signedEvent);
+        await new Promise((resolve, reject) => {
+          const subscription = observable.subscribe({
+            next: (packet) => {
+              if (packet.type === 'ok') {
+                resolve(packet);
+              }
+            },
+            error: (error) => reject(error),
+            complete: () => resolve(null)
+          });
+
+          // Timeout after 5 seconds
+          setTimeout(() => {
+            subscription.unsubscribe();
+            resolve(null);
+          }, 5000);
+        });
 
         // Update user profile in database
         await apiRequest("POST", "/api/profile", profile);
