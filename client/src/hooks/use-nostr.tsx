@@ -176,6 +176,36 @@ export function useNostr() {
     }
   }, [posts, debugLog]);
 
+  // メタデータ取得の最適化されたインターフェース
+  const loadPostMetadata = useCallback((pubkey: string) => {
+    if (!globalRxInstance || !subscriptionReadyRef.current) {
+      debugLog(`Metadata load skipped: rxInstance=${!!globalRxInstance}, ready=${subscriptionReadyRef.current}`);
+      return;
+    }
+
+    // キャッシュをチェック
+    const memCached = metadataMemoryCache.get(pubkey);
+    if (memCached && (Date.now() - memCached.timestamp < CACHE_TTL)) {
+      debugLog(`Using cached metadata for ${pubkey}`);
+      if (!memCached.error) {
+        setUserMetadata(current => {
+          const updated = new Map(current);
+          updated.set(pubkey, memCached.data);
+          return updated;
+        });
+        return;
+      }
+    }
+
+    // メタデータ更新キューに追加（重複は自動的に排除される）
+    metadataUpdateQueue.current.add(pubkey);
+
+    // キューが溜まっていたらバッチ処理を開始
+    if (!isProcessingBatch) {
+      processBatchMetadataUpdate();
+    }
+  }, [debugLog, processBatchMetadataUpdate]);
+
   // イベントとキャッシュの更新
   const updatePostsAndCache = useCallback((event: any, post: Post) => {
     debugLog(`Processing event: ${event.id} from ${event.pubkey}`);
@@ -191,14 +221,8 @@ export function useNostr() {
       return updatedPosts;
     });
 
-    // メタデータ更新キューに追加（重複は自動的に排除される）
-    metadataUpdateQueue.current.add(event.pubkey);
-
-    // キューが溜まっていたらバッチ処理を開始
-    if (!isProcessingBatch) {
-      processBatchMetadataUpdate();
-    }
-  }, [processBatchMetadataUpdate, debugLog]);
+    loadPostMetadata(event.pubkey);
+  }, [loadPostMetadata, debugLog]);
 
   // rx-nostrの初期化
   useEffect(() => {
@@ -393,6 +417,7 @@ export function useNostr() {
         return memCached.data;
       }
       return userMetadata.get(pubkey);
-    }, [userMetadata])
+    }, [userMetadata]),
+    loadPostMetadata
   };
 }
