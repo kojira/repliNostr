@@ -86,11 +86,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const generateNewKeys = async () => {
     try {
       setIsLoading(true);
-      // Generate a random 32-byte private key
+      setError(null);
+
+      // Generate a random private key using the Web Crypto API
       const privateKeyBytes = new Uint8Array(32);
-      window.crypto.getRandomValues(privateKeyBytes);
-      const privateKey = Buffer.from(privateKeyBytes).toString('hex');
+      crypto.getRandomValues(privateKeyBytes);
+
+      // Convert to hex string
+      const privateKey = Array.from(privateKeyBytes)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      console.log("Generating new keys..."); // デバッグログ
       const publicKey = getPublicKey(privateKey);
+      console.log("Public key generated:", publicKey); // デバッグログ
 
       const user: NostrUser = {
         type: "generated",
@@ -102,14 +111,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem("nostr_auth", JSON.stringify(user));
 
       toast({
-        title: "Keys Generated",
+        title: "キー生成完了",
         description: "新しいNostrキーが生成されました。秘密鍵を安全に保管してください！",
       });
     } catch (e) {
+      console.error("Key generation error:", e); // デバッグログ
       const error = e as Error;
       setError(error);
       toast({
-        title: "Key Generation Failed",
+        title: "キー生成エラー",
         description: error.message,
         variant: "destructive",
       });
