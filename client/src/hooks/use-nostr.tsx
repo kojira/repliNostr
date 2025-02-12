@@ -485,37 +485,59 @@ export function useNostr() {
       }
 
       debugLog("Creating new post event");
-      const event = {
+      const signer = seckeySigner(user.privateKey);
+
+      // Create and sign the event
+      const event = await signer.sign({
         kind: 1,
         content,
         created_at: Math.floor(Date.now() / 1000),
         tags: [],
-      };
+      });
 
-      debugLog("Sending post with content:", content);
+      debugLog("Sending signed post with content:", content);
 
       return new Promise<Post>((resolve, reject) => {
+        let successCount = 0;
+        let failureCount = 0;
+        const totalRelays = DEFAULT_RELAYS.length;
+
         globalRxInstance!.send(event).subscribe({
           next: (packet) => {
-            if (packet.ok && packet.id && packet.sig) {
-              debugLog(`Post sent successfully to ${packet.from}, id: ${packet.id}`);
+            debugLog(`Relay response from ${packet.from}:`, packet);
+            if (packet.ok) {
+              debugLog(`Post sent successfully to ${packet.from}`);
+              successCount++;
+
+              // Post is already signed, so we can create it immediately
               const post: Post = {
                 id: 0,
                 userId: user.id,
                 content: event.content,
                 createdAt: new Date(event.created_at * 1000).toISOString(),
-                nostrEventId: packet.id,
-                pubkey: user.publicKey,
-                signature: packet.sig,
+                nostrEventId: event.id,
+                pubkey: event.pubkey,
+                signature: event.sig,
                 metadata: {
                   tags: event.tags,
                   relays: DEFAULT_RELAYS,
                 },
               };
-              resolve(post);
+
+              if (successCount === 1) {
+                // Resolve with the first success
+                resolve(post);
+              }
             } else {
               debugLog(`Failed to send post to ${packet.from}`);
-              reject(new Error(`Failed to send to ${packet.from}`));
+              failureCount++;
+            }
+
+            if (successCount + failureCount === totalRelays) {
+              debugLog(`Post sending completed. Success: ${successCount}, Failed: ${failureCount}`);
+              if (successCount === 0) {
+                reject(new Error("Failed to send to all relays"));
+              }
             }
           },
           error: (error) => {
@@ -526,7 +548,7 @@ export function useNostr() {
       });
     },
     onSuccess: (post) => {
-      // 署名済みのイベントのみを追加
+      // Only add posts that have both an event ID and signature
       if (post.nostrEventId && post.signature) {
         setPosts((currentPosts) => {
           const updatedPosts = new Map(currentPosts);
