@@ -44,13 +44,29 @@ export function useNostr() {
       console.log("Fetching events from relays:", readRelays);
 
       try {
-        // Fetch recent events from relays
-        const events = await poolRef.current.list(readRelays, [
-          {
-            kinds: [1], // テキスト投稿
-            limit: 100,
-          }
-        ]);
+        // Fetch recent events from relays using queryEvents
+        const sub = poolRef.current.sub(readRelays, [{
+          kinds: [1], // テキスト投稿
+          limit: 100,
+        }]);
+
+        const events: any[] = [];
+        await new Promise<void>((resolve, reject) => {
+          sub.on('event', (event: any) => {
+            events.push(event);
+          });
+
+          // Set a timeout to close the subscription after 3 seconds
+          setTimeout(() => {
+            sub.unsub();
+            resolve();
+          }, 3000);
+
+          sub.on('eose', () => {
+            sub.unsub();
+            resolve();
+          });
+        });
 
         console.log("Received events:", events);
 
@@ -145,7 +161,7 @@ export function useNostr() {
           });
 
           // Wait for at least one successful publish with timeout
-          const timeout = new Promise((_, reject) => 
+          const timeout = new Promise((_, reject) =>
             setTimeout(() => reject(new Error("Publish timeout")), 5000)
           );
 
@@ -248,7 +264,7 @@ export function useNostr() {
         });
 
         // Wait for at least one successful publish with timeout
-        const timeout = new Promise((_, reject) => 
+        const timeout = new Promise((_, reject) =>
           setTimeout(() => reject(new Error("Publish timeout")), 5000)
         );
 
