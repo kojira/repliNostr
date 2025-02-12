@@ -19,7 +19,13 @@ export const posts = pgTable("posts", {
   metadata: json("metadata")
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
+// Add more validation rules
+export const insertUserSchema = createInsertSchema(users, {
+  username: z.string().min(3, "Username must be at least 3 characters"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  publicKey: z.string(),
+  privateKey: z.string()
+}).pick({
   username: true,
   password: true,
   publicKey: true,

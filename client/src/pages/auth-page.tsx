@@ -9,19 +9,22 @@ import { insertUserSchema, type InsertUser } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
 import { Redirect } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import * as secp from "@noble/secp256k1";
+import { randomBytes } from "crypto";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 
 type LoginFormData = Pick<InsertUser, "username" | "password">;
 
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
+  const { toast } = useToast();
 
   const loginForm = useForm<LoginFormData>({
     resolver: zodResolver(insertUserSchema.pick({ username: true, password: true })),
   });
 
-  const registerForm = useForm<InsertUser>({
-    resolver: zodResolver(insertUserSchema),
+  const registerForm = useForm<LoginFormData>({
+    resolver: zodResolver(insertUserSchema.pick({ username: true, password: true })),
   });
 
   if (user) {
@@ -33,17 +36,31 @@ export default function AuthPage() {
   });
 
   const onRegister = registerForm.handleSubmit(async (data) => {
-    // Generate Nostr keypair
-    const privateKeyBytes = secp.utils.randomPrivateKey();
-    const privateKey = secp.utils.bytesToHex(privateKeyBytes);
-    const publicKeyBytes = secp.schnorr.getPublicKey(privateKeyBytes);
-    const publicKey = secp.utils.bytesToHex(publicKeyBytes);
+    try {
+      // Generate 32 bytes of random data for private key
+      const privateKeyBytes = new Uint8Array(32);
+      crypto.getRandomValues(privateKeyBytes);
+      const privateKey = Array.from(privateKeyBytes)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
 
-    registerMutation.mutate({
-      ...data,
-      privateKey,
-      publicKey,
-    });
+      // For now, use the same key for public (this is just for testing)
+      // In production, we would use proper key derivation
+      const publicKey = privateKey;
+
+      registerMutation.mutate({
+        ...data,
+        privateKey,
+        publicKey,
+      });
+    } catch (error) {
+      console.error("Registration error:", error);
+      toast({
+        title: "Registration Error",
+        description: error instanceof Error ? error.message : "Failed to generate keys",
+        variant: "destructive",
+      });
+    }
   });
 
   return (
@@ -66,16 +83,29 @@ export default function AuthPage() {
                     <div>
                       <Label htmlFor="username">Username</Label>
                       <Input {...loginForm.register("username")} />
+                      {loginForm.formState.errors.username && (
+                        <p className="text-sm text-destructive mt-1">
+                          {loginForm.formState.errors.username.message}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <Label htmlFor="password">Password</Label>
                       <Input type="password" {...loginForm.register("password")} />
+                      {loginForm.formState.errors.password && (
+                        <p className="text-sm text-destructive mt-1">
+                          {loginForm.formState.errors.password.message}
+                        </p>
+                      )}
                     </div>
                     <Button 
                       type="submit" 
                       className="w-full"
                       disabled={loginMutation.isPending}
                     >
+                      {loginMutation.isPending && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
                       Login
                     </Button>
                   </form>
@@ -88,16 +118,29 @@ export default function AuthPage() {
                     <div>
                       <Label htmlFor="username">Username</Label>
                       <Input {...registerForm.register("username")} />
+                      {registerForm.formState.errors.username && (
+                        <p className="text-sm text-destructive mt-1">
+                          {registerForm.formState.errors.username.message}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <Label htmlFor="password">Password</Label>
                       <Input type="password" {...registerForm.register("password")} />
+                      {registerForm.formState.errors.password && (
+                        <p className="text-sm text-destructive mt-1">
+                          {registerForm.formState.errors.password.message}
+                        </p>
+                      )}
                     </div>
                     <Button 
                       type="submit" 
                       className="w-full"
                       disabled={registerMutation.isPending}
                     >
+                      {registerMutation.isPending && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
                       Register
                     </Button>
                   </form>

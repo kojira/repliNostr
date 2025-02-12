@@ -5,13 +5,19 @@ import { storage } from "./storage";
 import { insertPostSchema } from "@shared/schema";
 
 export function registerRoutes(app: Express): Server {
+  // Add debug middleware
+  app.use((req, res, next) => {
+    console.log(`[DEBUG] ${req.method} ${req.path}`);
+    next();
+  });
+
   setupAuth(app);
 
   // Posts
   app.post("/api/posts", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     const validatedPost = insertPostSchema.parse(req.body);
-    
+
     const post = {
       ...validatedPost,
       userId: req.user.id,
@@ -31,7 +37,7 @@ export function registerRoutes(app: Express): Server {
   app.post("/api/follow/:pubkey", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     const { pubkey } = req.params;
-    
+
     const user = await storage.getUser(req.user.id);
     if (!user) return res.sendStatus(404);
 

@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+declare const self: ServiceWorkerGlobalScope;
 
 const CACHE_NAME = 'nostr-client-v1';
 
@@ -9,7 +10,7 @@ const STATIC_ASSETS = [
   '/src/index.css'
 ];
 
-self.addEventListener('install', (event: ExtendableEvent) => {
+self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS);
@@ -17,7 +18,12 @@ self.addEventListener('install', (event: ExtendableEvent) => {
   );
 });
 
-self.addEventListener('fetch', (event: FetchEvent) => {
+self.addEventListener('fetch', (event) => {
+  // Skip caching for API requests
+  if (event.request.url.includes('/api/')) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((response) => {
       if (response) {
@@ -40,7 +46,7 @@ self.addEventListener('fetch', (event: FetchEvent) => {
   );
 });
 
-self.addEventListener('activate', (event: ExtendableEvent) => {
+self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
