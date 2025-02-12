@@ -294,25 +294,30 @@ export function useNostr() {
   // イベントとキャッシュの更新
   const updatePostsAndCache = useCallback(
     (event: any, post: Post) => {
-      setPosts((currentPosts) => {
-        const updatedPosts = new Map(currentPosts);
-        // イベントIDをキーとして使用して重複を防ぐ
-        if (!updatedPosts.has(event.id)) {
-          updatedPosts.set(event.id, post);
-          debugLog(`Added new post with id: ${event.id}`);
-        }
-        return updatedPosts;
-      });
+      // イベントIDが存在し、署名が存在する場合のみ投稿を追加
+      if (event.id && event.sig) {
+        setPosts((currentPosts) => {
+          const updatedPosts = new Map(currentPosts);
+          // イベントIDをキーとして使用して重複を防ぐ
+          if (!updatedPosts.has(event.id)) {
+            updatedPosts.set(event.id, post);
+            debugLog(`Added new post with id: ${event.id}`);
+          }
+          return updatedPosts;
+        });
 
-      // キャッシュされたメタデータがあれば即座に適用し、なければキューに追加
-      if (isValidCache(event.pubkey)) {
-        debugLog(`Using cached metadata for ${event.pubkey}`);
-        applyMetadataFromCache(event.pubkey);
-      } else if (!pendingMetadata.current.includes(event.pubkey)) {
-        pendingMetadata.current.push(event.pubkey);
-        processMetadataQueue().catch((error) =>
-          debugLog("Error processing metadata queue:", error),
-        );
+        // キャッシュされたメタデータがあれば即座に適用し、なければキューに追加
+        if (isValidCache(event.pubkey)) {
+          debugLog(`Using cached metadata for ${event.pubkey}`);
+          applyMetadataFromCache(event.pubkey);
+        } else if (!pendingMetadata.current.includes(event.pubkey)) {
+          pendingMetadata.current.push(event.pubkey);
+          processMetadataQueue().catch((error) =>
+            debugLog("Error processing metadata queue:", error),
+          );
+        }
+      } else {
+        debugLog("Skipping invalid event without id or signature");
       }
     },
     [debugLog, isValidCache, applyMetadataFromCache, processMetadataQueue],
@@ -479,6 +484,7 @@ export function useNostr() {
         throw new Error("Not ready to post");
       }
 
+      debugLog("Creating new post event");
       const event = {
         kind: 1,
         content,
@@ -491,16 +497,16 @@ export function useNostr() {
       return new Promise<Post>((resolve, reject) => {
         globalRxInstance!.send(event).subscribe({
           next: (packet) => {
-            if (packet.ok) {
+            if (packet.ok && packet.id && packet.sig) {
               debugLog(`Post sent successfully to ${packet.from}, id: ${packet.id}`);
               const post: Post = {
                 id: 0,
                 userId: user.id,
                 content: event.content,
                 createdAt: new Date(event.created_at * 1000).toISOString(),
-                nostrEventId: packet.id!,
+                nostrEventId: packet.id,
                 pubkey: user.publicKey,
-                signature: packet.sig!,
+                signature: packet.sig,
                 metadata: {
                   tags: event.tags,
                   relays: DEFAULT_RELAYS,
@@ -520,16 +526,18 @@ export function useNostr() {
       });
     },
     onSuccess: (post) => {
-      setPosts((currentPosts) => {
-        const updatedPosts = new Map(currentPosts);
-        // イベントIDをキーとして使用
-        updatedPosts.set(post.nostrEventId, post);
-        return updatedPosts;
-      });
-      toast({
-        title: "成功",
-        description: "投稿を送信しました",
-      });
+      // 署名済みのイベントのみを追加
+      if (post.nostrEventId && post.signature) {
+        setPosts((currentPosts) => {
+          const updatedPosts = new Map(currentPosts);
+          updatedPosts.set(post.nostrEventId, post);
+          return updatedPosts;
+        });
+        toast({
+          title: "成功",
+          description: "投稿を送信しました",
+        });
+      }
     },
     onError: (error) => {
       console.error("Error creating post:", error);
