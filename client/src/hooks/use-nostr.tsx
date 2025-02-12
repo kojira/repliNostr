@@ -88,6 +88,8 @@ export function useNostr() {
     const pubkeys = Array.from(metadataUpdateQueue.current);
     metadataUpdateQueue.current.clear();
 
+    console.log(`Processing metadata batch for pubkeys:`, pubkeys);
+
     const filter = {
       kinds: [0],
       authors: pubkeys,
@@ -102,6 +104,7 @@ export function useNostr() {
         next: ({ event }) => {
           try {
             const metadata = JSON.parse(event.content) as UserMetadata;
+            console.log(`Received metadata for ${event.pubkey}:`, metadata);
             setUserMetadata(current => {
               const updated = new Map(current);
               updated.set(event.pubkey, {
@@ -113,20 +116,42 @@ export function useNostr() {
             });
           } catch (error) {
             console.error(`Failed to parse metadata for ${event.pubkey}:`, error);
+          } finally {
+            pendingMetadataRequests.current.delete(event.pubkey);
           }
         },
         error: (error) => {
           console.error("Error receiving metadata:", error);
+          // On error, remove all pubkeys from pending requests
+          pubkeys.forEach(pubkey => pendingMetadataRequests.current.delete(pubkey));
         }
       });
 
     rxReq.emit(filter);
+    console.log("Metadata request filter emitted:", filter);
   };
 
   // メタデータの更新をキューに追加
   const queueMetadataUpdate = (pubkey: string) => {
-    if (!rxRef.current || userMetadata.has(pubkey) || pendingMetadataRequests.current.has(pubkey)) return;
+    if (!rxRef.current) return;
 
+    const cached = userMetadata.get(pubkey);
+    const timestamp = localStorage.getItem(METADATA_TIMESTAMP_KEY);
+    const isStale = timestamp && (Date.now() - parseInt(timestamp, 10) >= CACHE_TTL);
+
+    // Skip if we have valid cached data
+    if (cached && !isStale) {
+      console.log(`Using cached metadata for ${pubkey}`);
+      return;
+    }
+
+    // Skip if request is already pending
+    if (pendingMetadataRequests.current.has(pubkey)) {
+      console.log(`Metadata request already pending for ${pubkey}`);
+      return;
+    }
+
+    console.log(`Queueing metadata update for ${pubkey}`);
     metadataUpdateQueue.current.add(pubkey);
     pendingMetadataRequests.current.add(pubkey);
 
