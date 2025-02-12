@@ -296,7 +296,11 @@ export function useNostr() {
     (event: any, post: Post) => {
       setPosts((currentPosts) => {
         const updatedPosts = new Map(currentPosts);
-        updatedPosts.set(event.id, post);
+        // イベントIDをキーとして使用して重複を防ぐ
+        if (!updatedPosts.has(event.id)) {
+          updatedPosts.set(event.id, post);
+          debugLog(`Added new post with id: ${event.id}`);
+        }
         return updatedPosts;
       });
 
@@ -306,7 +310,6 @@ export function useNostr() {
         applyMetadataFromCache(event.pubkey);
       } else if (!pendingMetadata.current.includes(event.pubkey)) {
         pendingMetadata.current.push(event.pubkey);
-        // キューの処理を開始
         processMetadataQueue().catch((error) =>
           debugLog("Error processing metadata queue:", error),
         );
@@ -483,10 +486,13 @@ export function useNostr() {
         tags: [],
       };
 
+      debugLog("Sending post with content:", content);
+
       return new Promise<Post>((resolve, reject) => {
         globalRxInstance!.send(event).subscribe({
           next: (packet) => {
             if (packet.ok) {
+              debugLog(`Post sent successfully to ${packet.from}, id: ${packet.id}`);
               const post: Post = {
                 id: 0,
                 userId: user.id,
@@ -502,16 +508,21 @@ export function useNostr() {
               };
               resolve(post);
             } else {
+              debugLog(`Failed to send post to ${packet.from}`);
               reject(new Error(`Failed to send to ${packet.from}`));
             }
           },
-          error: (error) => reject(error),
+          error: (error) => {
+            debugLog("Error sending post:", error);
+            reject(error);
+          },
         });
       });
     },
     onSuccess: (post) => {
       setPosts((currentPosts) => {
         const updatedPosts = new Map(currentPosts);
+        // イベントIDをキーとして使用
         updatedPosts.set(post.nostrEventId, post);
         return updatedPosts;
       });
