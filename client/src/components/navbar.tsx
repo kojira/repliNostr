@@ -11,7 +11,7 @@ import UserProfile from "./user-profile";
 import { useAuth } from "@/hooks/use-auth";
 
 export default function Navbar() {
-  const { user, logoutMutation } = useAuth();
+  const { user, logout } = useAuth();
 
   if (!user) return null;
 
@@ -30,10 +30,10 @@ export default function Navbar() {
               <SheetTitle>メニュー</SheetTitle>
             </SheetHeader>
             <div className="mt-4 space-y-6">
-              <UserProfile user={user} />
+              <UserProfile />
               <Button 
                 variant="outline" 
-                onClick={() => logoutMutation.mutate()}
+                onClick={() => logout()}
                 className="w-full"
               >
                 ログアウト
