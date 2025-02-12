@@ -69,6 +69,27 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Cache Nostr events endpoint
+  app.post("/api/posts/cache", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+
+    try {
+      const { id, pubkey, content, sig, tags, relays } = req.body;
+      const post = await storage.cacheNostrEvent(req.user.id, {
+        id,
+        pubkey,
+        content,
+        sig,
+        tags,
+        relays
+      });
+      res.json(post);
+    } catch (error) {
+      console.error('[Posts] Cache error:', error);
+      res.status(500).json({ error: "Failed to cache Nostr event" });
+    }
+  });
+
   // Following
   app.post("/api/follow/:pubkey", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);

@@ -25,7 +25,13 @@ export const posts = pgTable("posts", {
   userId: integer("user_id").notNull(),
   content: text("content").notNull(),
   createdAt: text("created_at").notNull(),
-  metadata: json("metadata")
+  nostrEventId: text("nostr_event_id").notNull().unique(), // Nostrイベントの一意のID
+  pubkey: text("pubkey").notNull(), // 投稿者の公開鍵
+  signature: text("signature").notNull(), // イベントの署名
+  metadata: json("metadata").$type<{
+    tags?: string[][];
+    relays?: string[];
+  }>()
 });
 
 // Add more validation rules
@@ -53,8 +59,20 @@ export const insertUserSchema = createInsertSchema(users, {
   picture: true
 });
 
-export const insertPostSchema = createInsertSchema(posts).pick({
+export const insertPostSchema = createInsertSchema(posts, {
+  content: z.string(),
+  nostrEventId: z.string(),
+  pubkey: z.string(),
+  signature: z.string(),
+  metadata: z.object({
+    tags: z.array(z.array(z.string())).optional(),
+    relays: z.array(z.string()).optional()
+  }).optional()
+}).pick({
   content: true,
+  nostrEventId: true,
+  pubkey: true,
+  signature: true,
   metadata: true
 });
 

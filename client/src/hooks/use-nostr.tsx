@@ -4,21 +4,88 @@ import { Post, User } from "@shared/schema";
 import { useToast } from "./use-toast";
 import { SimplePool, getPublicKey, getEventHash, finalizeEvent } from 'nostr-tools';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
+import { useEffect, useRef } from "react";
 
 export function useNostr() {
   const { toast } = useToast();
+  const poolRef = useRef<SimplePool | null>(null);
+
+  // Initialize pool on mount
+  useEffect(() => {
+    poolRef.current = new SimplePool();
+
+    return () => {
+      if (poolRef.current) {
+        poolRef.current.close();
+      }
+    };
+  }, []);
 
   const postsQuery = useQuery<Post[]>({
     queryKey: ["/api/posts"],
+    queryFn: async () => {
+      // Get the current user and their relay settings
+      const userRes = await apiRequest("GET", "/api/user");
+      const user: User = await userRes.json();
+
+      if (!poolRef.current) {
+        throw new Error("Relay pool not initialized");
+      }
+
+      // Get read-enabled relay URLs
+      const readRelays = user.relays
+        .filter(relay => relay.read)
+        .map(relay => relay.url);
+
+      if (readRelays.length === 0) {
+        throw new Error("No read-enabled relays configured");
+      }
+
+      console.log("Fetching events from relays:", readRelays);
+
+      try {
+        // Fetch recent events from relays
+        const events = await poolRef.current.list(readRelays, [
+          {
+            kinds: [1], // テキスト投稿
+            limit: 100,
+          }
+        ]);
+
+        console.log("Received events:", events);
+
+        // Cache events in the database
+        const cachePromises = events.map(async (event) => {
+          try {
+            const res = await apiRequest("POST", "/api/posts/cache", {
+              id: event.id,
+              pubkey: event.pubkey,
+              content: event.content,
+              sig: event.sig,
+              tags: event.tags,
+              relays: readRelays
+            });
+            return await res.json();
+          } catch (error) {
+            console.error("Failed to cache event:", error);
+            return null;
+          }
+        });
+
+        const cachedPosts = await Promise.all(cachePromises);
+        return cachedPosts.filter((post): post is Post => post !== null);
+      } catch (error) {
+        console.error("Failed to fetch events from relays:", error);
+        // If relay fetch fails, fall back to cached posts
+        const res = await apiRequest("GET", "/api/posts");
+        return res.json();
+      }
+    },
     staleTime: 30000, // 30 seconds
   });
 
   const createPostMutation = useMutation({
     mutationFn: async (content: string) => {
-      // First, create the post in our database
-      const res = await apiRequest("POST", "/api/posts", { content });
-      const post = await res.json();
-
       // Get the current user
       const userRes = await apiRequest("GET", "/api/user");
       const user: User = await userRes.json();
@@ -49,8 +116,9 @@ export function useNostr() {
           console.log("Event signed successfully");
           console.log("Complete signed event:", JSON.stringify(signedEvent, null, 2));
 
-          // Create a new pool for relays
-          const pool = new SimplePool();
+          if (!poolRef.current) {
+            throw new Error("Relay pool not initialized");
+          }
 
           // Filter and get write-enabled relay URLs
           const writeRelays = user.relays
@@ -67,7 +135,7 @@ export function useNostr() {
           const publishPromises = writeRelays.map(async (url) => {
             try {
               console.log(`Attempting to publish to relay: ${url}`);
-              const result = await pool.publish([url], signedEvent);
+              const result = await poolRef.current!.publish([url], signedEvent);
               console.log(`Publish result for ${url}:`, result);
               return result;
             } catch (error) {
@@ -87,7 +155,18 @@ export function useNostr() {
           ]);
 
           console.log("Successfully published to relays:", results);
-          return post;
+
+          // Cache the event in our database
+          const cacheRes = await apiRequest("POST", "/api/posts/cache", {
+            id: signedEvent.id,
+            pubkey: signedEvent.pubkey,
+            content: signedEvent.content,
+            sig: signedEvent.sig,
+            tags: signedEvent.tags,
+            relays: writeRelays
+          });
+
+          return await cacheRes.json();
 
         } catch (error) {
           console.error("Failed to sign event:", error);
@@ -102,7 +181,7 @@ export function useNostr() {
       queryClient.invalidateQueries({ queryKey: ["/api/posts"] });
       toast({
         title: "投稿を作成しました",
-        description: "投稿はデータベースとNostrリレーに保存されました",
+        description: "投稿はNostrリレーとデータベースに保存されました",
       });
     },
     onError: (error: Error) => {
@@ -142,8 +221,9 @@ export function useNostr() {
         const signedEvent = finalizeEvent(unsignedEvent, privateKeyBytes);
         console.log("Metadata event signed successfully");
 
-        // Create a new pool for relays
-        const pool = new SimplePool();
+        if (!poolRef.current) {
+          throw new Error("Relay pool not initialized");
+        }
 
         // Get write-enabled relays
         const writeRelays = user.relays
@@ -156,8 +236,15 @@ export function useNostr() {
 
         // Connect and publish to relays
         const publishPromises = writeRelays.map(async (url) => {
-          const relay = await pool.ensureRelay(url);
-          return pool.publish([url], signedEvent);
+          try {
+            console.log(`Attempting to publish metadata to relay: ${url}`);
+            const result = await poolRef.current!.publish([url], signedEvent);
+            console.log(`Metadata publish result for ${url}:`, result);
+            return result;
+          } catch (error) {
+            console.error(`Failed to publish metadata to relay ${url}:`, error);
+            throw error;
+          }
         });
 
         // Wait for at least one successful publish with timeout
