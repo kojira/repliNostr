@@ -4,10 +4,11 @@ import { useToast } from "./use-toast";
 import { createRxNostr, createRxForwardReq, nip07Signer } from "rx-nostr";
 import { verifier, seckeySigner } from "rx-nostr-crypto";
 import { useEffect, useRef, useState, useCallback } from "react";
+import type { RxNostr, Event, RelayRequest, VerifiableEvent, RelayResponse } from "rx-nostr";
 import { useAuth } from "./use-auth";
 
 // Define custom Event type to match rx-nostr's event structure
-interface NostrEvent {
+interface NostrEvent extends VerifiableEvent {
   id?: string;
   pubkey?: string;
   created_at: number;
@@ -868,13 +869,13 @@ export function useNostr() {
     until,
     limit = 30,
     search
-  }: FetchUserPostsOptions) => {
+  }: FetchUserPostsOptions): Promise<Post[]> => {
     if (!globalRxInstance || !subscriptionReadyRef.current) {
       throw new Error("Nostr client not ready");
     }
 
     debugLog(`Fetching posts for user ${pubkey}`);
-    const filter = {
+    const filter: RelayRequest = {
       kinds: [KIND.TEXT_NOTE],
       authors: [pubkey],
       limit,
@@ -895,7 +896,7 @@ export function useNostr() {
         }
       }, 10000); // 10 second timeout
 
-      const subscription = globalRxInstance.use(rxReq).subscribe({
+      const subscription = globalRxInstance!.use(rxReq).subscribe({
         next: ({ event }: { event: NostrEvent }) => {
           if (event.id && event.sig) {
             debugLog(`Received event: ${event.id}, created_at: ${event.created_at}`);
@@ -920,7 +921,7 @@ export function useNostr() {
             posts.push(post);
           }
         },
-        error: (error) => {
+        error: (error: Error) => {
           debugLog("Error fetching user posts:", error);
           clearTimeout(timeoutId);
           reject(error);
