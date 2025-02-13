@@ -11,24 +11,48 @@
                 const isGitHubPages = window.location.hostname.includes('github.io');
                 const baseUrl = isGitHubPages ? '/repliNostr' : '';
 
+                console.log('[index] Initial state:', {
+                    isGitHubPages,
+                    baseUrl,
+                    currentUrl: window.location.href,
+                    pathname: window.location.pathname
+                });
+
                 // baseタグを動的に設定（末尾のスラッシュを含める）
                 const base = document.createElement('base');
                 base.href = baseUrl + '/';
                 document.head.prepend(base);
+                console.log('[index] Set base href:', base.href);
 
                 // 404.htmlからのリダイレクト処理
                 const redirect = sessionStorage.redirect;
                 if (redirect) {
-                    console.log('Handling redirect from:', redirect);
+                    console.log('[index] Found redirect in sessionStorage:', redirect);
                     delete sessionStorage.redirect;
 
-                    // パスの取得とクエリ・ハッシュの保持
-                    const url = new URL(redirect);
-                    const path = url.pathname;
-                    const finalPath = path + url.search + url.hash;
+                    try {
+                        // パスの取得とクエリ・ハッシュの保持
+                        const url = new URL(redirect);
+                        console.log('[index] Parsed redirect URL:', {
+                            pathname: url.pathname,
+                            search: url.search,
+                            hash: url.hash
+                        });
 
-                    console.log('Restoring path:', finalPath);
-                    history.replaceState(null, '', finalPath);
+                        // baseUrlより後ろのパスを抽出
+                        let finalPath = url.pathname;
+                        if (finalPath.startsWith(baseUrl)) {
+                            finalPath = finalPath.slice(baseUrl.length);
+                        }
+                        finalPath = (finalPath.startsWith('/') ? '' : '/') + finalPath + url.search + url.hash;
+
+                        console.log('[index] Final path:', finalPath);
+                        history.replaceState(null, '', finalPath);
+                    } catch (error) {
+                        console.error('[index] Error processing redirect:', error);
+                    }
+                } else {
+                    console.log('[index] No redirect found in sessionStorage');
                 }
 
                 // 環境変数の設定
@@ -36,6 +60,7 @@
                     BASE_URL: baseUrl,
                     ASSET_URL: `${baseUrl}/assets/`
                 };
+                console.log('[index] Set environment variables:', window.__ENV);
             })();
         </script>
         <script type="module" src="src/main.tsx"></script>

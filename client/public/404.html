@@ -5,25 +5,35 @@
     <title>Page Not Found</title>
     <script>
         // デバッグログ
-        console.log('404 - Current URL:', window.location.href);
-        console.log('404 - Origin:', window.location.origin);
-        console.log('404 - Pathname:', window.location.pathname);
+        console.log('[404] Initial state:', {
+            fullUrl: window.location.href,
+            origin: window.location.origin,
+            pathname: window.location.pathname,
+            search: window.location.search,
+            hash: window.location.hash
+        });
 
         // GitHub Pages環境のみで実行
         if (location.hostname.includes('github.io')) {
-            console.log('404 - GitHub Pages environment detected');
+            console.log('[404] GitHub Pages environment detected');
+
+            const baseUrl = '/repliNostr/';
+            console.log('[404] Base URL:', baseUrl);
 
             // 現在のURLをそのまま保存
             sessionStorage.redirect = window.location.href;
-            console.log('404 - Saved redirect URL:', sessionStorage.redirect);
+            console.log('[404] Saved to sessionStorage:', {
+                redirect: sessionStorage.redirect,
+                pathname: window.location.pathname,
+                baseUrl: baseUrl
+            });
 
             // SPAのルートにリダイレクト
-            const baseUrl = '/repliNostr/';
             const redirectUrl = window.location.origin + baseUrl;
-            console.log('404 - Redirecting to:', redirectUrl);
+            console.log('[404] Redirecting to:', redirectUrl);
             window.location.replace(redirectUrl);
         } else {
-            console.log('404 - Development environment detected');
+            console.log('[404] Development environment detected, redirecting to root');
             window.location.replace('/');
         }
     </script>
