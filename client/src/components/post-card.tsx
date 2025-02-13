@@ -109,7 +109,7 @@ function PostCard({ post, priority = false }: PostCardProps) {
                 <span className="sr-only">メニューを開く</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuContent align="end" className="min-w-[140px] w-[140px]">
               <DropdownMenuItem onClick={handleJsonDialog}>
                 JSONを確認
               </DropdownMenuItem>

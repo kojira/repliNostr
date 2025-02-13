@@ -68,7 +68,7 @@ const DropdownMenuContent = React.forwardRef<
         "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2",
         "data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-        "fixed sm:absolute",
+        "fixed right-4 sm:absolute sm:right-0",
         className
       )}
       {...props}
