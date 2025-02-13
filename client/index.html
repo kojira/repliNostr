@@ -4,51 +4,11 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <base href="/repliNostr/" />
-        <script>
-            // Define environment variables with proper base path handling
-            const basePath = '/repliNostr/';
-            window.__ENV = {
-                BASE_URL: basePath,
-                ASSET_URL: `${basePath}assets/`
-            };
-
-            // Debug logging with clearer messages
-            console.log("[Debug] Environment:", {
-                currentUrl: window.location.href,
-                origin: window.location.origin,
-                pathname: window.location.pathname,
-                baseUrl: window.__ENV.BASE_URL,
-                assetUrl: window.__ENV.ASSET_URL
-            });
-
-            // Handle GitHub Pages SPA redirect
-            (function () {
-                const isGitHubPages = location.hostname.includes("github.io");
-                console.log("[Debug] Is GitHub Pages:", isGitHubPages);
-
-                if (isGitHubPages) {
-                    const redirect = sessionStorage.redirect;
-                    if (redirect) {
-                        // Clear stored redirect to prevent loops
-                        delete sessionStorage.redirect;
-
-                        if (redirect !== location.href) {
-                            console.log("[Debug] Redirecting from:", redirect);
-                            const newPath = redirect.replace(location.origin, "");
-                            console.log("[Debug] New path:", newPath);
-                            history.replaceState(null, null, basePath + newPath.replace(/^\/repliNostr/, ''));
-                        }
-                    }
-                } else {
-                    console.log("[Debug] Development environment - no redirect needed");
-                }
-            })();
-        </script>
         <title>Nostr Client</title>
         <link rel="manifest" href="/repliNostr/manifest.json" />
+        <script type="module" src="/src/main.tsx"></script>
     </head>
     <body class="min-h-screen bg-background font-sans antialiased">
         <div id="root"></div>
-        <script type="module" src="/src/main.tsx"></script>
     </body>
 </html>

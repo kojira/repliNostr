@@ -4,26 +4,17 @@
     <meta charset="UTF-8">
     <title>Page Not Found</title>
     <script>
-        // GitHub Pages SPA Redirect with proper base path handling
-        const l = window.location;
-        const origin = l.origin;
-        const basePath = '/repliNostr';
-        // Remove base path from pathname if it exists
-        const pathWithoutBase = l.pathname.startsWith(basePath) 
-            ? l.pathname.slice(basePath.length) 
-            : l.pathname;
-        const redirectPath = origin + basePath + pathWithoutBase + l.search + l.hash;
-
-        // Store the full URL for redirect after reaching the main page
-        sessionStorage.redirect = redirectPath;
-        console.log('[Debug] Redirect path:', redirectPath);
-
-        // Redirect to the base URL
-        window.location.href = origin + basePath + '/';
+        (function() {
+            const l = window.location;
+            const basePath = '/repliNostr/';
+            const redirectPath = l.origin + basePath + l.pathname.replace(basePath, '') + l.search + l.hash;
+            sessionStorage.redirect = redirectPath;
+            window.location.replace(l.origin + basePath);
+        })();
     </script>
 </head>
 <body>
     <h1>Page Not Found</h1>
-    <p>Redirecting to home page...</p>
+    <p>Redirecting...</p>
 </body>
 </html>
