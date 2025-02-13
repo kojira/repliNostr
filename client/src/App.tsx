@@ -20,7 +20,7 @@ export default function App() {
           <Switch>
             <Route path="/auth" component={AuthPage} />
             <ProtectedRoute path="/" component={HomePage} />
-            <ProtectedRoute path="/profile/:pubkey" component={ProfilePage} />
+            <ProtectedRoute path="/profile" component={ProfilePage} />
             <Route component={NotFound} />
           </Switch>
         </Router>

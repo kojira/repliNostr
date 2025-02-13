@@ -8,27 +8,20 @@
         console.log('404 - Current URL:', window.location.href);
         console.log('404 - Origin:', window.location.origin);
         console.log('404 - Pathname:', window.location.pathname);
-        
+
         // GitHub Pages環境のみで実行
         if (location.hostname.includes('github.io')) {
             console.log('404 - GitHub Pages environment detected');
-            const url = window.location.href;
-            const baseUrl = '/repliNostr/';
 
-            // セッションストレージにリダイレクト情報を保存
-            const pathname = window.location.pathname;
-            const search = window.location.search;
-            const hash = window.location.hash;
-            const redirectPath = pathname.startsWith(baseUrl) 
-                ? pathname 
-                : baseUrl + pathname.replace(/^\//, '');
-
-            const fullRedirectPath = window.location.origin + redirectPath + search + hash;
-            console.log('404 - Setting redirect path:', fullRedirectPath);
-            sessionStorage.redirect = fullRedirectPath;
+            // 現在のURLをそのまま保存
+            sessionStorage.redirect = window.location.href;
+            console.log('404 - Saved redirect URL:', sessionStorage.redirect);
 
             // SPAのルートにリダイレクト
-            window.location.replace(window.location.origin + baseUrl);
+            const baseUrl = '/repliNostr/';
+            const redirectUrl = window.location.origin + baseUrl;
+            console.log('404 - Redirecting to:', redirectUrl);
+            window.location.replace(redirectUrl);
         } else {
             console.log('404 - Development environment detected');
             window.location.replace('/');

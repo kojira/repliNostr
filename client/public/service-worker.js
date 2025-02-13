@@ -100,8 +100,8 @@ self.addEventListener('fetch', (event) => {
     // ナビゲーションリクエストの処理
     if (isNavigationRequest(event.request)) {
       event.respondWith(
-        fetchWithNetworkFirst(event.request)
-          .catch(() => caches.match('/index.html'))
+        fetchWithNetworkFirst(new Request(BASE_URL))
+          .catch(() => caches.match(BASE_URL + 'index.html'))
       );
       return;
     }

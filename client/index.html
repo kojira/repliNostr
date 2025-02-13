@@ -16,27 +16,26 @@
                 base.href = baseUrl + '/';
                 document.head.prepend(base);
 
-                // 環境変数の設定（アセットのパスには末尾のスラッシュを含める）
-                window.__ENV = {
-                    BASE_URL: baseUrl,
-                    ASSET_URL: `${baseUrl}/assets/`
-                };
-
                 // 404.htmlからのリダイレクト処理
                 const redirect = sessionStorage.redirect;
                 if (redirect) {
                     console.log('Handling redirect from:', redirect);
                     delete sessionStorage.redirect;
 
-                    // パスの正規化
-                    const normalizedPath = redirect.replace(window.location.origin, '');
-                    if (normalizedPath !== baseUrl) {
-                        const finalPath = normalizedPath.startsWith(baseUrl) 
-                            ? normalizedPath 
-                            : baseUrl + normalizedPath.replace(/^\//, '');
-                        history.replaceState(null, '', finalPath);
-                    }
+                    // パスの取得とクエリ・ハッシュの保持
+                    const url = new URL(redirect);
+                    const path = url.pathname;
+                    const finalPath = path + url.search + url.hash;
+
+                    console.log('Restoring path:', finalPath);
+                    history.replaceState(null, '', finalPath);
                 }
+
+                // 環境変数の設定
+                window.__ENV = {
+                    BASE_URL: baseUrl,
+                    ASSET_URL: `${baseUrl}/assets/`
+                };
             })();
         </script>
         <script type="module" src="src/main.tsx"></script>
