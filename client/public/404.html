@@ -8,38 +8,27 @@
         console.log('404 - Current URL:', window.location.href);
         console.log('404 - Origin:', window.location.origin);
         console.log('404 - Pathname:', window.location.pathname);
-
+        
         // GitHub Pages環境のみで実行
         if (location.hostname.includes('github.io')) {
             console.log('404 - GitHub Pages environment detected');
             const url = window.location.href;
             const baseUrl = '/repliNostr/';
 
-            // アセットファイルへのアクセスの場合
-            if (url.includes('/assets/')) {
-                console.log('404 - Asset request detected');
-                // アセットパスを修正
-                const assetPath = url.split('/assets/')[1];
-                const newPath = `${window.location.origin}${baseUrl}assets/${assetPath}`;
-                console.log('404 - Redirecting asset to:', newPath);
-                window.location.replace(newPath);
-            } else {
-                // 通常のページアクセスの場合
-                const pathname = window.location.pathname;
-                const search = window.location.search;
-                const hash = window.location.hash;
+            // セッションストレージにリダイレクト情報を保存
+            const pathname = window.location.pathname;
+            const search = window.location.search;
+            const hash = window.location.hash;
+            const redirectPath = pathname.startsWith(baseUrl) 
+                ? pathname 
+                : baseUrl + pathname.replace(/^\//, '');
 
-                // /repliNostr/が含まれていない場合は追加
-                if (!pathname.includes(baseUrl)) {
-                    const newPath = `${window.location.origin}${baseUrl}${pathname.replace(/^\//, '')}${search}${hash}`;
-                    console.log('404 - Redirecting to:', newPath);
-                    window.location.replace(newPath);
-                } else {
-                    // /repliNostr/が既に含まれている場合はそのままSPAにリダイレクト
-                    console.log('404 - Base path already present, redirecting to SPA root');
-                    window.location.replace(`${window.location.origin}${baseUrl}`);
-                }
-            }
+            const fullRedirectPath = window.location.origin + redirectPath + search + hash;
+            console.log('404 - Setting redirect path:', fullRedirectPath);
+            sessionStorage.redirect = fullRedirectPath;
+
+            // SPAのルートにリダイレクト
+            window.location.replace(window.location.origin + baseUrl);
         } else {
             console.log('404 - Development environment detected');
             window.location.replace('/');

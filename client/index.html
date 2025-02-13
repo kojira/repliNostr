@@ -3,29 +3,43 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <base href="/repliNostr/" />
         <title>Nostr Client</title>
         <link rel="manifest" href="manifest.json" />
-        <script type="module" src="src/main.tsx"></script>
         <script>
-            // Handle GitHub Pages asset paths
-            const isGitHubPages = window.location.hostname.includes('github.io');
-            const baseUrl = isGitHubPages ? '/repliNostr/' : '/';
-            window.__ENV = {
-                BASE_URL: baseUrl,
-                ASSET_URL: `${baseUrl}assets/`
-            };
+            // GitHub Pages用の設定
+            (function() {
+                const isGitHubPages = window.location.hostname.includes('github.io');
+                const baseUrl = isGitHubPages ? '/repliNostr/' : '/';
 
-            // Handle redirects from 404.html
-            const redirect = sessionStorage.redirect;
-            if (redirect) {
-                console.log('Handling redirect from:', redirect);
-                delete sessionStorage.redirect;
-                if (redirect !== window.location.href) {
-                    history.replaceState(null, '', redirect);
+                // baseタグを動的に設定
+                const base = document.createElement('base');
+                base.href = baseUrl;
+                document.head.prepend(base);
+
+                // 環境変数の設定
+                window.__ENV = {
+                    BASE_URL: baseUrl,
+                    ASSET_URL: `${baseUrl}assets/`
+                };
+
+                // 404.htmlからのリダイレクト処理
+                const redirect = sessionStorage.redirect;
+                if (redirect) {
+                    console.log('Handling redirect from:', redirect);
+                    delete sessionStorage.redirect;
+
+                    // パスの正規化
+                    const normalizedPath = redirect.replace(window.location.origin, '');
+                    if (normalizedPath !== baseUrl) {
+                        const finalPath = normalizedPath.startsWith(baseUrl) 
+                            ? normalizedPath 
+                            : baseUrl + normalizedPath.replace(/^\//, '');
+                        history.replaceState(null, '', finalPath);
+                    }
                 }
-            }
+            })();
         </script>
+        <script type="module" src="src/main.tsx"></script>
     </head>
     <body class="min-h-screen bg-background font-sans antialiased">
         <div id="root"></div>
