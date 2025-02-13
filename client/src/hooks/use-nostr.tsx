@@ -4,8 +4,18 @@ import { useToast } from "./use-toast";
 import { createRxNostr, createRxForwardReq, nip07Signer } from "rx-nostr";
 import { verifier, seckeySigner } from "rx-nostr-crypto";
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { RxNostr, Event } from "rx-nostr";
 import { useAuth } from "./use-auth";
+
+// Define custom Event type to match rx-nostr's event structure
+interface NostrEvent {
+  id?: string;
+  pubkey?: string;
+  created_at: number;
+  kind: number;
+  tags: string[][];
+  content: string;
+  sig?: string;
+}
 
 const METADATA_CACHE_KEY = "nostr_metadata_cache";
 const METADATA_TIMESTAMP_KEY = "nostr_metadata_timestamp";
@@ -329,7 +339,7 @@ export function useNostr() {
 
   // イベントとキャッシュの更新
   const updatePostsAndCache = useCallback(
-    (event: Event, post: Post) => {
+    (event: NostrEvent, post: Post) => {
       // イベントIDが存在し、署名が存在する場合のみ投稿を追加
       if (event.id && event.sig) {
         setPosts((currentPosts) => {
@@ -875,24 +885,30 @@ export function useNostr() {
     return new Promise<Post[]>((resolve, reject) => {
       const posts: Post[] = [];
       const rxReq = createRxForwardReq();
+      let receivedCount = 0;
+      const timeoutId = setTimeout(() => {
+        if (receivedCount === 0) {
+          resolve([]); // Return empty array if no posts received
+        }
+      }, 10000); // 10 second timeout
 
-      const subscription = globalRxInstance!.use(rxReq).subscribe({
-        next: ({ event }) => {
-          if (!seenEvents.current.has(event.id)) {
-            // If search is provided, filter by content
-            if (search && !event.content.toLowerCase().includes(search.toLowerCase())) {
-              return;
-            }
+      const subscription = globalRxInstance.use(rxReq).subscribe({
+        next: ({ event }: { event: NostrEvent }) => {
+          // If search is provided, filter by content
+          if (search && !event.content.toLowerCase().includes(search.toLowerCase())) {
+            return;
+          }
 
-            seenEvents.current.add(event.id);
+          if (event.id && event.sig) {
+            receivedCount++;
             const post: Post = {
               id: 0,
               userId: 0,
               content: event.content,
               createdAt: new Date(event.created_at * 1000).toISOString(),
-              nostrEventId: event.id!,
+              nostrEventId: event.id,
               pubkey: event.pubkey!,
-              signature: event.sig!,
+              signature: event.sig,
               metadata: {
                 tags: event.tags || [],
                 relays: DEFAULT_RELAYS,
@@ -903,17 +919,26 @@ export function useNostr() {
         },
         error: (error) => {
           debugLog("Error fetching user posts:", error);
+          clearTimeout(timeoutId);
           reject(error);
         },
         complete: () => {
+          clearTimeout(timeoutId);
           debugLog(`Fetched ${posts.length} posts for user ${pubkey}`);
+          // Sort posts by timestamp before returning
+          posts.sort((a, b) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
           resolve(posts);
         },
       });
 
       rxReq.emit(filter);
 
-      return () => subscription.unsubscribe();
+      return () => {
+        subscription.unsubscribe();
+        clearTimeout(timeoutId);
+      };
     });
   }, [debugLog]);
 

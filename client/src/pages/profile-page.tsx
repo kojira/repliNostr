@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import PostCard from "@/components/post-card";
+import { Post } from "@shared/schema";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useInView } from "react-intersection-observer";
