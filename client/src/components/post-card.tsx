@@ -31,6 +31,7 @@ function PostCard({ post, priority = false }: PostCardProps) {
   const { getUserMetadata, loadPostMetadata } = useNostr();
   const [isLoading, setIsLoading] = useState(!priority);
   const [showJson, setShowJson] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const { ref, inView } = useInView({
     threshold: 0,
     triggerOnce: true
@@ -79,6 +80,11 @@ function PostCard({ post, priority = false }: PostCardProps) {
     );
   };
 
+  const handleJsonDialog = () => {
+    setShowJson(true);
+    setDropdownOpen(false);
+  };
+
   return (
     <>
       <Card ref={ref} className={cn(isLoading && "opacity-70")}>
@@ -96,14 +102,15 @@ function PostCard({ post, priority = false }: PostCardProps) {
               {format(new Date(post.createdAt), "yyyy/MM/dd HH:mm:ss")}
             </p>
           </div>
-          <DropdownMenu>
+          <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" className="shrink-0">
                 <MoreVertical className="h-4 w-4" />
+                <span className="sr-only">メニューを開く</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => setShowJson(true)}>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem onClick={handleJsonDialog}>
                 JSONを確認
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -129,7 +136,7 @@ function PostCard({ post, priority = false }: PostCardProps) {
       </Card>
 
       <Dialog open={showJson} onOpenChange={setShowJson}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>投稿データ</DialogTitle>
           </DialogHeader>
