@@ -5,8 +5,15 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <base href="/repliNostr/" />
         <title>Nostr Client</title>
-        <link rel="manifest" href="/repliNostr/manifest.json" />
-        <script type="module" src="/src/main.tsx"></script>
+        <link rel="manifest" href="manifest.json" />
+        <script type="module" src="src/main.tsx"></script>
+        <script>
+            // Handle GitHub Pages asset paths
+            window.__ENV = {
+                BASE_URL: '/repliNostr/',
+                ASSET_URL: '/repliNostr/assets/'
+            };
+        </script>
     </head>
     <body class="min-h-screen bg-background font-sans antialiased">
         <div id="root"></div>

@@ -4,7 +4,7 @@ declare const self: ServiceWorkerGlobalScope;
 const CACHE_NAME = 'nostr-client-v1';
 const BASE_URL = '/repliNostr/';  // GitHub Pages base path
 
-// Define cache patterns
+// Define cache patterns and asset URLs
 const STATIC_PATTERNS = [
   // HTML files
   BASE_URL,
@@ -19,12 +19,21 @@ const STATIC_PATTERNS = [
   `${BASE_URL}icon-512x512.png`
 ];
 
-// Asset URL rewrite function
+// Asset URL rewrite function - handles both development and production
 function rewriteAssetUrl(url: string): string {
   const urlObj = new URL(url);
+
+  // Handle /assets/ paths
   if (urlObj.pathname.startsWith('/assets/')) {
-    return urlObj.origin + BASE_URL + urlObj.pathname.slice(1);
+    const newPath = BASE_URL + 'assets/' + urlObj.pathname.split('/assets/')[1];
+    return urlObj.origin + newPath;
   }
+
+  // Handle direct paths
+  if (!urlObj.pathname.startsWith(BASE_URL)) {
+    return urlObj.origin + BASE_URL + urlObj.pathname.replace(/^\//, '');
+  }
+
   return url;
 }
 
@@ -33,8 +42,16 @@ self.addEventListener('fetch', (event) => {
 
   // Rewrite asset URLs
   if (url.includes('/assets/')) {
+    const rewrittenUrl = rewriteAssetUrl(url);
     event.respondWith(
-      fetch(rewriteAssetUrl(url))
+      fetch(rewrittenUrl)
+        .then(response => {
+          if (!response || response.status !== 200) {
+            console.error(`[SW] Failed to fetch: ${url}, trying cache`);
+            return caches.match(event.request);
+          }
+          return response;
+        })
         .catch(error => {
           console.error('[SW] Failed to fetch:', error);
           return caches.match(event.request);

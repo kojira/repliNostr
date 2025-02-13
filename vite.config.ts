@@ -16,8 +16,16 @@ export default defineConfig({
     },
   },
   root: path.resolve(__dirname, "client"),
+  base: "/repliNostr/", // GitHub Pages用のベースパスを追加
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        assetFileNames: "assets/[name]-[hash][extname]",
+        chunkFileNames: "assets/[name]-[hash].js",
+        entryFileNames: "assets/[name]-[hash].js",
+      },
+    },
   },
 });

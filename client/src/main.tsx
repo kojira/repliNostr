@@ -2,14 +2,12 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
-// Get base URL from environment variables or default to /repliNostr/
-const baseUrl = '/repliNostr/';
+// Get base URL from environment or default
+const baseUrl = import.meta.env.DEV ? '/' : '/repliNostr/';
 
 // Debug environment variables
 console.log('[Debug] Environment Variables:', {
-  VITE_BASE_URL: import.meta.env.VITE_BASE_URL,
-  VITE_ASSET_URL: import.meta.env.VITE_ASSET_URL,
-  VITE_PUBLIC_PATH: import.meta.env.VITE_PUBLIC_PATH,
+  BASE_URL: baseUrl,
   MODE: import.meta.env.MODE,
   DEV: import.meta.env.DEV,
   PROD: import.meta.env.PROD
@@ -19,6 +17,7 @@ console.log('[Debug] Environment Variables:', {
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
+      // Register service worker with the correct path
       const swUrl = `${baseUrl}service-worker.js`;
       console.log('[SW] Registering service worker at:', swUrl);
       const registration = await navigator.serviceWorker.register(swUrl, {
@@ -31,14 +30,6 @@ if ('serviceWorker' in navigator) {
         console.log('[SW] Service worker is active');
       }
 
-      // Debug asset paths
-      console.log('[Debug] Asset Paths:', {
-        baseUrl,
-        currentScript: document.currentScript?.getAttribute('src'),
-        stylesheets: Array.from(document.styleSheets).map(sheet => sheet.href),
-        scripts: Array.from(document.scripts).map(script => script.src)
-      });
-
     } catch (error) {
       console.error('[SW] Registration failed:', error);
     }
@@ -47,10 +38,11 @@ if ('serviceWorker' in navigator) {
 
 // Set environment variables
 if (!window.__ENV) {
-  window.__ENV = {};
+  window.__ENV = {
+    BASE_URL: baseUrl,
+    ASSET_URL: import.meta.env.DEV ? '/assets/' : `${baseUrl}assets/`
+  };
 }
-window.__ENV.BASE_URL = baseUrl;
-window.__ENV.ASSET_URL = `${baseUrl}assets/`;
 
 // Debug logging
 console.log('[Debug] Final Environment:', {
