@@ -5,6 +5,16 @@ import "./index.css";
 // Get base URL from environment variables or default to /repliNostr/
 const baseUrl = '/repliNostr/';
 
+// Debug environment variables
+console.log('[Debug] Environment Variables:', {
+  VITE_BASE_URL: import.meta.env.VITE_BASE_URL,
+  VITE_ASSET_URL: import.meta.env.VITE_ASSET_URL,
+  VITE_PUBLIC_PATH: import.meta.env.VITE_PUBLIC_PATH,
+  MODE: import.meta.env.MODE,
+  DEV: import.meta.env.DEV,
+  PROD: import.meta.env.PROD
+});
+
 // Register service worker for PWA support and asset path handling
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
@@ -21,10 +31,14 @@ if ('serviceWorker' in navigator) {
         console.log('[SW] Service worker is active');
       }
 
-      // Handle asset path rewrites through service worker
-      registration.addEventListener('activate', () => {
-        console.log('[SW] Service worker activated - handling asset paths');
+      // Debug asset paths
+      console.log('[Debug] Asset Paths:', {
+        baseUrl,
+        currentScript: document.currentScript?.getAttribute('src'),
+        stylesheets: Array.from(document.styleSheets).map(sheet => sheet.href),
+        scripts: Array.from(document.scripts).map(script => script.src)
       });
+
     } catch (error) {
       console.error('[SW] Registration failed:', error);
     }
@@ -39,7 +53,7 @@ window.__ENV.BASE_URL = baseUrl;
 window.__ENV.ASSET_URL = `${baseUrl}assets/`;
 
 // Debug logging
-console.log('[Debug] Environment:', {
+console.log('[Debug] Final Environment:', {
   baseUrl,
   env: window.__ENV,
   currentUrl: window.location.href,
