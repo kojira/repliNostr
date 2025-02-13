@@ -4,7 +4,7 @@ import { useToast } from "./use-toast";
 import { createRxNostr, createRxForwardReq, nip07Signer } from "rx-nostr";
 import { verifier, seckeySigner } from "rx-nostr-crypto";
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { RxNostr } from "rx-nostr";
+import type { RxNostr, Event } from "rx-nostr";
 import { useAuth } from "./use-auth";
 
 const METADATA_CACHE_KEY = "nostr_metadata_cache";
@@ -176,6 +176,7 @@ export function useNostr() {
     }
 
     isProcessingMetadata = true;
+    debugLog("Starting metadata queue processing");
 
     try {
       while (pendingMetadata.current.length > 0) {
@@ -194,16 +195,17 @@ export function useNostr() {
           debugLog(
             `Metadata load skipped: rxInstance=${!!globalRxInstance}, ready=${subscriptionReadyRef.current}`,
           );
-          break; // 準備が整っていない場合は処理を中断
+          break;
         }
 
-        debugLog(`Processing metadata for ${pubkey}`);
+        debugLog(`Requesting metadata for ${pubkey}`);
 
         try {
           await new Promise((resolve, reject) => {
             const filter = {
               kinds: [0],
               authors: [pubkey],
+              limit: 1,
             };
 
             const rxReq = createRxForwardReq();
@@ -212,15 +214,11 @@ export function useNostr() {
             const timeoutId = setTimeout(() => {
               if (!isCompleted) {
                 debugLog(`Metadata request timeout for ${pubkey}`);
-                // タイムアウト時はデフォルト値を設定
                 const defaultMetadata = {
                   name: `nostr:${pubkey.slice(0, 8)}`,
+                  picture: undefined,
                 };
-                const cacheEntry = storage.updateMetadata(
-                  pubkey,
-                  defaultMetadata,
-                  "Metadata fetch timeout"
-                );
+                storage.updateMetadata(pubkey, defaultMetadata, "Timeout");
                 setUserMetadata((current) => {
                   const updated = new Map(current);
                   updated.set(pubkey, defaultMetadata);
@@ -233,20 +231,23 @@ export function useNostr() {
 
             const subscription = globalRxInstance!.use(rxReq).subscribe({
               next: ({ event }) => {
-                try {
-                  if (isCompleted) return; // タイムアウト後のレスポンスは無視
+                if (isCompleted) return;
 
-                  debugLog(`Received metadata for pubkey: ${event.pubkey}`);
+                try {
+                  debugLog(`Received metadata for ${event.pubkey}`);
                   const metadata = JSON.parse(event.content) as UserMetadata;
+
+                  if (!metadata) {
+                    throw new Error("Invalid metadata format");
+                  }
+
                   const processedMetadata = {
                     name: metadata.name || `nostr:${event.pubkey.slice(0, 8)}`,
                     picture: metadata.picture,
                     about: metadata.about,
                   };
 
-                  // キャッシュを更新
                   storage.updateMetadata(event.pubkey, processedMetadata);
-
                   setUserMetadata((current) => {
                     const updated = new Map(current);
                     updated.set(event.pubkey, processedMetadata);
@@ -261,11 +262,22 @@ export function useNostr() {
                 }
               },
               error: (error) => {
-                debugLog("Metadata request error:", error);
+                debugLog("Metadata subscription error:", error);
                 reject(error);
               },
               complete: () => {
                 if (!isCompleted) {
+                  debugLog(`No metadata found for ${pubkey}`);
+                  const defaultMetadata = {
+                    name: `nostr:${pubkey.slice(0, 8)}`,
+                    picture: undefined,
+                  };
+                  storage.updateMetadata(pubkey, defaultMetadata, "Not found");
+                  setUserMetadata((current) => {
+                    const updated = new Map(current);
+                    updated.set(pubkey, defaultMetadata);
+                    return updated;
+                  });
                   isCompleted = true;
                   resolve(undefined);
                 }
@@ -283,8 +295,8 @@ export function useNostr() {
           debugLog(`Error fetching metadata for ${pubkey}:`, error);
         }
 
-        // 処理が完了したらキューから削除
         pendingMetadata.current.shift();
+        await new Promise(resolve => setTimeout(resolve, 100)); // Rate limiting
       }
     } finally {
       isProcessingMetadata = false;
@@ -315,7 +327,7 @@ export function useNostr() {
 
   // イベントとキャッシュの更新
   const updatePostsAndCache = useCallback(
-    (event: any, post: Post) => {
+    (event: Event, post: Post) => {
       // イベントIDが存在し、署名が存在する場合のみ投稿を追加
       if (event.id && event.sig) {
         setPosts((currentPosts) => {
@@ -329,11 +341,11 @@ export function useNostr() {
         });
 
         // キャッシュされたメタデータがあれば即座に適用し、なければキューに追加
-        if (isValidCache(event.pubkey)) {
+        if (isValidCache(event.pubkey!)) {
           debugLog(`Using cached metadata for ${event.pubkey}`);
-          applyMetadataFromCache(event.pubkey);
-        } else if (!pendingMetadata.current.includes(event.pubkey)) {
-          pendingMetadata.current.push(event.pubkey);
+          applyMetadataFromCache(event.pubkey!);
+        } else if (!pendingMetadata.current.includes(event.pubkey!)) {
+          pendingMetadata.current.push(event.pubkey!);
           processMetadataQueue().catch((error) =>
             debugLog("Error processing metadata queue:", error),
           );
@@ -422,9 +434,9 @@ export function useNostr() {
                     userId: 0,
                     content: event.content,
                     createdAt: new Date(event.created_at * 1000).toISOString(),
-                    nostrEventId: event.id,
-                    pubkey: event.pubkey,
-                    signature: event.sig,
+                    nostrEventId: event.id!,
+                    pubkey: event.pubkey!,
+                    signature: event.sig!,
                     metadata: {
                       tags: event.tags || [],
                       relays: DEFAULT_RELAYS,
@@ -469,9 +481,9 @@ export function useNostr() {
                     userId: 0,
                     content: event.content,
                     createdAt: new Date(event.created_at * 1000).toISOString(),
-                    nostrEventId: event.id,
-                    pubkey: event.pubkey,
-                    signature: event.sig,
+                    nostrEventId: event.id!,
+                    pubkey: event.pubkey!,
+                    signature: event.sig!,
                     metadata: {
                       tags: event.tags || [],
                       relays: DEFAULT_RELAYS,
