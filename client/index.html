@@ -9,17 +9,17 @@
             // GitHub Pages用の設定
             (function() {
                 const isGitHubPages = window.location.hostname.includes('github.io');
-                const baseUrl = isGitHubPages ? '/repliNostr/' : '/';
+                const baseUrl = isGitHubPages ? '/repliNostr' : '';
 
-                // baseタグを動的に設定
+                // baseタグを動的に設定（末尾のスラッシュを含める）
                 const base = document.createElement('base');
-                base.href = baseUrl;
+                base.href = baseUrl + '/';
                 document.head.prepend(base);
 
-                // 環境変数の設定
+                // 環境変数の設定（アセットのパスには末尾のスラッシュを含める）
                 window.__ENV = {
                     BASE_URL: baseUrl,
-                    ASSET_URL: `${baseUrl}assets/`
+                    ASSET_URL: `${baseUrl}/assets/`
                 };
 
                 // 404.htmlからのリダイレクト処理

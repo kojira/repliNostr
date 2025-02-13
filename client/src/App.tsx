@@ -8,8 +8,8 @@ import AuthPage from "@/pages/auth-page";
 import HomePage from "@/pages/home-page";
 import { ProtectedRoute } from "./lib/protected-route";
 
-// GitHub Pages用のベースパスを取得
-const base = import.meta.env.DEV ? '/' : '/repliNostr/';
+// GitHub Pages用のベースパスを取得（末尾のスラッシュを除去）
+const base = import.meta.env.DEV ? '' : '/repliNostr';
 
 export default function App() {
   return (
