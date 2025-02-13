@@ -1,0 +1,32 @@
+[SW] Fetch event: {url: 'https://kojira.github.io/repliNostr/assets/index-XZ3ftTqN.js', mode: 'cors', method: 'GET'}
+service-worker.js:35 [SW] Checking if cacheable: {url: 'https://kojira.github.io/repliNostr/assets/index-XZ3ftTqN.js', method: 'GET', isCacheable: true}
+service-worker.js:123 [SW] Cache first fetch: https://kojira.github.io/repliNostr/assets/index-XZ3ftTqN.js
+service-worker.js:35 [SW] Checking if cacheable: {url: 'https://kojira.github.io/repliNostr/assets/index-XZ3ftTqN.js', method: 'GET', isCacheable: true}
+service-worker.js:152 [SW] Fetch event: {url: 'https://kojira.github.io/repliNostr/assets/index-BpeqVgwZ.css', mode: 'cors', method: 'GET'}
+service-worker.js:35 [SW] Checking if cacheable: {url: 'https://kojira.github.io/repliNostr/assets/index-BpeqVgwZ.css', method: 'GET', isCacheable: true}
+service-worker.js:123 [SW] Cache first fetch: https://kojira.github.io/repliNostr/assets/index-BpeqVgwZ.css
+service-worker.js:35 [SW] Checking if cacheable: {url: 'https://kojira.github.io/repliNostr/assets/index-BpeqVgwZ.css', method: 'GET', isCacheable: true}
+service-worker.js:131 [SW] Returning cached response: https://kojira.github.io/repliNostr/assets/index-XZ3ftTqN.js
+service-worker.js:131 [SW] Returning cached response: https://kojira.github.io/repliNostr/assets/index-BpeqVgwZ.css
+3ce2b51dca8b67b69c0ccb7c6a226437f7dbcc44a32426e70e52c78336fc72c7:59 [index] Initial state: {isGitHubPages: true, baseUrl: '/repliNostr', currentUrl: 'https://kojira.github.io/repliNostr/profile/3ce2b5…69c0ccb7c6a226437f7dbcc44a32426e70e52c78336fc72c7', pathname: '/repliNostr/profile/3ce2b51dca8b67b69c0ccb7c6a226437f7dbcc44a32426e70e52c78336fc72c7'}
+3ce2b51dca8b67b69c0ccb7c6a226437f7dbcc44a32426e70e52c78336fc72c7:70 [index] Set base href: https://kojira.github.io/repliNostr/
+3ce2b51dca8b67b69c0ccb7c6a226437f7dbcc44a32426e70e52c78336fc72c7:100 [index] No redirect found in sessionStorage
+3ce2b51dca8b67b69c0ccb7c6a226437f7dbcc44a32426e70e52c78336fc72c7:108 [index] Set environment variables: {BASE_URL: '/repliNostr', ASSET_URL: '/repliNostr/assets/'}
+service-worker.js:152 [SW] Fetch event: {url: 'https://kojira.github.io/repliNostr/manifest.json', mode: 'cors', method: 'GET'}
+service-worker.js:35 [SW] Checking if cacheable: {url: 'https://kojira.github.io/repliNostr/manifest.json', method: 'GET', isCacheable: true}
+service-worker.js:62 [SW] Network first fetch: {url: 'https://kojira.github.io/repliNostr/manifest.json', mode: 'cors'}
+service-worker.js:35 [SW] Checking if cacheable: {url: 'https://kojira.github.io/repliNostr/manifest.json', method: 'GET', isCacheable: true}
+service-worker.js:74 [SW] Network response: {url: 'https://kojira.github.io/repliNostr/manifest.json', status: 200, ok: true}
+index-XZ3ftTqN.js:202 [Debug] Environment Variables: {BASE_URL: '/repliNostr/', MODE: 'production', DEV: false, PROD: true}
+index-XZ3ftTqN.js:202 [Debug] Final Environment: {baseUrl: '/repliNostr/', env: {…}, currentUrl: 'https://kojira.github.io/repliNostr/profile/3ce2b5…69c0ccb7c6a226437f7dbcc44a32426e70e52c78336fc72c7', origin: 'https://kojira.github.io', pathname: '/repliNostr/profile/3ce2b51dca8b67b69c0ccb7c6a226437f7dbcc44a32426e70e52c78336fc72c7'}
+service-worker.js:152 [SW] Fetch event: {url: 'chrome-extension://kpgefcfmnafjgpblomihpgmejjdanjjp/nostr-provider.js', mode: 'no-cors', method: 'GET'}
+service-worker.js:35 [SW] Checking if cacheable: {url: 'chrome-extension://kpgefcfmnafjgpblomihpgmejjdanjjp/nostr-provider.js', method: 'GET', isCacheable: false}
+service-worker.js:160 [SW] Skipping non-cacheable request: chrome-extension://kpgefcfmnafjgpblomihpgmejjdanjjp/nostr-provider.js
+index-XZ3ftTqN.js:202 [SW] Registering service worker at: /repliNostr/service-worker.js
+index-XZ3ftTqN.js:202 [SW] Registration successful: ServiceWorkerRegistration {installing: null, waiting: null, active: ServiceWorker, navigationPreload: NavigationPreloadManager, scope: 'https://kojira.github.io/repliNostr/', …}
+index-XZ3ftTqN.js:202 [SW] Service worker is active
+service-worker.js:152 [SW] Fetch event: {url: 'https://kojira.github.io/repliNostr/icon-192x192.png', mode: 'no-cors', method: 'GET'}
+service-worker.js:35 [SW] Checking if cacheable: {url: 'https://kojira.github.io/repliNostr/icon-192x192.png', method: 'GET', isCacheable: true}
+service-worker.js:123 [SW] Cache first fetch: https://kojira.github.io/repliNostr/icon-192x192.png
+service-worker.js:35 [SW] Checking if cacheable: {url: 'https://kojira.github.io/repliNostr/icon-192x192.png', method: 'GET', isCacheable: true}
+service-worker.js:131 [SW] Returning cached response: https://kojira.github.io/repliNostr/icon-192x192.png

@@ -9,31 +9,36 @@
             // GitHub Pages用の設定
             (function() {
                 const isGitHubPages = window.location.hostname.includes('github.io');
-                const baseUrl = isGitHubPages ? '/repliNostr' : '';
+                const baseUrl = isGitHubPages ? '/repliNostr/' : '/';  // 末尾のスラッシュを含める
 
                 console.log('[index] Initial state:', {
                     isGitHubPages,
                     baseUrl,
                     currentUrl: window.location.href,
-                    pathname: window.location.pathname
+                    pathname: window.location.pathname,
+                    origin: window.location.origin
                 });
 
-                // baseタグを動的に設定（末尾のスラッシュを含める）
+                // baseタグを動的に設定
                 const base = document.createElement('base');
-                base.href = baseUrl + '/';
+                base.href = baseUrl;
                 document.head.prepend(base);
                 console.log('[index] Set base href:', base.href);
 
                 // 404.htmlからのリダイレクト処理
                 const redirect = sessionStorage.redirect;
                 if (redirect) {
-                    console.log('[index] Found redirect in sessionStorage:', redirect);
+                    console.log('[index] Found redirect in sessionStorage:', {
+                        redirect,
+                        currentPath: window.location.pathname
+                    });
                     delete sessionStorage.redirect;
 
                     try {
                         // パスの取得とクエリ・ハッシュの保持
                         const url = new URL(redirect);
                         console.log('[index] Parsed redirect URL:', {
+                            fullUrl: url.toString(),
                             pathname: url.pathname,
                             search: url.search,
                             hash: url.hash
@@ -43,11 +48,20 @@
                         let finalPath = url.pathname;
                         if (finalPath.startsWith(baseUrl)) {
                             finalPath = finalPath.slice(baseUrl.length);
+                            console.log('[index] Sliced base URL from path:', {
+                                originalPath: url.pathname,
+                                baseUrl,
+                                finalPath
+                            });
                         }
-                        finalPath = (finalPath.startsWith('/') ? '' : '/') + finalPath + url.search + url.hash;
 
-                        console.log('[index] Final path:', finalPath);
+                        // パスを正規化
+                        finalPath = '/' + finalPath.replace(/^\/+/, '') + url.search + url.hash;
+                        console.log('[index] Normalized final path:', finalPath);
+
+                        // 状態を更新
                         history.replaceState(null, '', finalPath);
+                        console.log('[index] Updated history state with path:', finalPath);
                     } catch (error) {
                         console.error('[index] Error processing redirect:', error);
                     }
@@ -58,7 +72,7 @@
                 // 環境変数の設定
                 window.__ENV = {
                     BASE_URL: baseUrl,
-                    ASSET_URL: `${baseUrl}/assets/`
+                    ASSET_URL: `${baseUrl}assets/`
                 };
                 console.log('[index] Set environment variables:', window.__ENV);
             })();
