@@ -9,8 +9,10 @@ import HomePage from "@/pages/home-page";
 import ProfilePage from "@/pages/profile-page";
 import { ProtectedRoute } from "./lib/protected-route";
 
-// GitHub Pages用のベースパスを取得（末尾のスラッシュを含めない）
-const base = import.meta.env.DEV ? '' : '/repliNostr';
+// GitHub Pages用のベースパスを取得（末尾のスラッシュを含める）
+const base = import.meta.env.DEV ? '' : '/repliNostr/';
+
+console.log('[App] Initializing with base:', base);
 
 export default function App() {
   return (
@@ -20,7 +22,7 @@ export default function App() {
           <Switch>
             <Route path="/auth" component={AuthPage} />
             <ProtectedRoute path="/" component={HomePage} />
-            <ProtectedRoute path="/profile" component={ProfilePage} />
+            <ProtectedRoute path="/profile/:pubkey" component={ProfilePage} />
             <Route component={NotFound} />
           </Switch>
         </Router>

@@ -15,6 +15,13 @@ import debounce from "lodash/debounce";
 
 export default function ProfilePage() {
   const { pubkey } = useParams<{ pubkey: string }>();
+
+  console.log('[ProfilePage] Rendered with params:', {
+    pubkey,
+    currentPath: window.location.pathname,
+    currentUrl: window.location.href
+  });
+
   const { 
     getUserMetadata, 
     loadPostMetadata, 
@@ -166,7 +173,10 @@ export default function ProfilePage() {
   const metadata = getUserMetadata(pubkey);
   const shortPubkey = pubkey?.slice(0, 8);
 
-  if (!pubkey) return null;
+  if (!pubkey) {
+    console.log('[ProfilePage] No pubkey provided, returning null');
+    return null;
+  }
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
