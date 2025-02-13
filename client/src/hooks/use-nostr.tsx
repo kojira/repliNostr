@@ -880,6 +880,11 @@ export function useNostr() {
       limit,
       ...(since && { since }),
       ...(until && { until }),
+      ...(search && { 
+        search: search.toLowerCase(),
+        // NostrのNIP-50で定義されている検索フィルタを使用
+        '#s': [search.toLowerCase()]
+      }),
     };
 
     return new Promise<Post[]>((resolve, reject) => {
@@ -894,11 +899,6 @@ export function useNostr() {
 
       const subscription = globalRxInstance.use(rxReq).subscribe({
         next: ({ event }: { event: NostrEvent }) => {
-          // If search is provided, filter by content
-          if (search && !event.content.toLowerCase().includes(search.toLowerCase())) {
-            return;
-          }
-
           if (event.id && event.sig) {
             receivedCount++;
             const post: Post = {
@@ -941,6 +941,7 @@ export function useNostr() {
       };
     });
   }, [debugLog]);
+
 
 
   return {
