@@ -1,0 +1,26 @@
+[SW] Fetching: https://kojira.github.io/repliNostr/assets/index-XZ3ftTqN.js
+service-worker.js:98 [SW] Fetching: https://kojira.github.io/repliNostr/assets/index-BpeqVgwZ.css
+service-worker.js:98 [SW] Fetching: https://kojira.github.io/repliNostr/manifest.json
+index-XZ3ftTqN.js:202 [Debug] Environment Variables: {BASE_URL: '/repliNostr/', MODE: 'production', DEV: false, PROD: true}
+index-XZ3ftTqN.js:202 [Debug] Final Environment: {baseUrl: '/repliNostr/', env: {…}, currentUrl: 'https://kojira.github.io/repliNostr/profile/9b840e…2d54c75e872246e76d96a45fcdd6b171dc723eeac7232e29b', origin: 'https://kojira.github.io', pathname: '/repliNostr/profile/9b840e12109a3ed2d54c75e872246e76d96a45fcdd6b171dc723eeac7232e29b'}
+service-worker.js:98 [SW] Fetching: chrome-extension://kpgefcfmnafjgpblomihpgmejjdanjjp/nostr-provider.js
+service-worker.js:98 [SW] Fetching: https://kojira.github.io/repliNostr/icon-192x192.png
+service-worker.js:59 [SW] Network fetch failed, falling back to cache: TypeError: Failed to execute 'put' on 'Cache': Request scheme 'chrome-extension' is unsupported
+    at fetchWithNetworkFirst (service-worker.js:55:19)
+The FetchEvent for "chrome-extension://kpgefcfmnafjgpblomihpgmejjdanjjp/nostr-provider.js" resulted in a network error response: the promise was rejected.
+Promise.then
+(anonymous) @ service-worker.js:124Understand this warningAI
+service-worker.js:67 Uncaught (in promise) Error: Resource not found in cache and network request failed
+    at fetchWithNetworkFirst (service-worker.js:67:9)
+fetchWithNetworkFirst @ service-worker.js:67
+await in fetchWithNetworkFirst
+(anonymous) @ service-worker.js:125Understand this errorAI
+content-script.build.js:1026 
+        
+        
+       GET chrome-extension://kpgefcfmnafjgpblomihpgmejjdanjjp/nostr-provider.js net::ERR_FAILED
+(anonymous) @ content-script.build.js:1026
+(anonymous) @ content-script.build.js:1048Understand this errorAI
+index-XZ3ftTqN.js:202 [SW] Registering service worker at: /repliNostr/service-worker.js
+index-XZ3ftTqN.js:202 [SW] Registration successful: ServiceWorkerRegistration {installing: null, waiting: null, active: ServiceWorker, navigationPreload: NavigationPreloadManager, scope: 'https://kojira.github.io/repliNostr/', …}
+index-XZ3ftTqN.js:202 [SW] Service worker is active

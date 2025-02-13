@@ -55,16 +55,33 @@ async function fetchWithNetworkFirst(request) {
       await cache.put(request, response.clone());
       return response;
     }
+
+    // 404エラーの場合、index.htmlを返す
+    if (response.status === 404 && request.mode === 'navigate') {
+      const indexResponse = await caches.match(BASE_URL + 'index.html');
+      if (indexResponse) {
+        return indexResponse;
+      }
+    }
+
+    throw new Error(`Network response was not ok: ${response.status}`);
   } catch (error) {
     console.log('[SW] Network fetch failed, falling back to cache:', error);
-  }
+    const cachedResponse = await caches.match(request);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
 
-  const cachedResponse = await caches.match(request);
-  if (cachedResponse) {
-    return cachedResponse;
-  }
+    // ナビゲーションリクエストの場合、index.htmlにフォールバック
+    if (request.mode === 'navigate') {
+      const indexResponse = await caches.match(BASE_URL + 'index.html');
+      if (indexResponse) {
+        return indexResponse;
+      }
+    }
 
-  throw new Error('Resource not found in cache and network request failed');
+    throw error;
+  }
 }
 
 // リソースのキャッシュファーストフェッチ
@@ -97,14 +114,6 @@ self.addEventListener('fetch', (event) => {
     const url = event.request.url;
     console.log('[SW] Fetching:', url);
 
-    // ナビゲーションリクエストの処理
-    if (isNavigationRequest(event.request)) {
-      event.respondWith(
-        fetchWithNetworkFirst(new Request(BASE_URL))
-          .catch(() => caches.match(BASE_URL + 'index.html'))
-      );
-      return;
-    }
 
     // 画像リクエストの処理
     if (isImageRequest(url)) {
@@ -120,7 +129,7 @@ self.addEventListener('fetch', (event) => {
       return;
     }
 
-    // その他のリクエストを処理
+    // その他のリクエストを処理（ナビゲーションリクエストを含む）
     event.respondWith(
       fetchWithNetworkFirst(event.request)
     );
