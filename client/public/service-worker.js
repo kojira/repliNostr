@@ -12,11 +12,11 @@ const STATIC_PATTERNS = [
   // Built assets (dynamic file names)
   new RegExp(`^${BASE_URL}assets/.*\\.js`),
   new RegExp(`^${BASE_URL}assets/.*\\.css`),
+  // Image files
+  `${BASE_URL}icon-192x192.png`,
+  `${BASE_URL}icon-512x512.png`,
   // Manifest file
   `${BASE_URL}manifest.json`,
-  // Icons
-  `${BASE_URL}icon-192x192.png`,
-  `${BASE_URL}icon-512x512.png`
 ];
 
 // Asset URL rewrite function
@@ -39,6 +39,11 @@ function rewriteAssetUrl(url) {
   }
 
   return url;
+}
+
+// 画像ファイルかどうかを判定
+function isImageRequest(url) {
+  return url.match(/\.(png|jpg|jpeg|gif|webp|ico|svg)$/i);
 }
 
 // リソースのネットワークファーストフェッチ
@@ -69,12 +74,17 @@ async function fetchWithCacheFirst(request) {
     return cachedResponse;
   }
 
-  const response = await fetch(request);
-  if (response.ok) {
-    const cache = await caches.open(CACHE_NAME);
-    await cache.put(request, response.clone());
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch (error) {
+    console.error('[SW] Cache first fetch failed:', error);
+    throw error;
   }
-  return response;
 }
 
 // ナビゲーションリクエストの処理
@@ -93,6 +103,12 @@ self.addEventListener('fetch', (event) => {
         fetchWithNetworkFirst(event.request)
           .catch(() => caches.match('/index.html'))
       );
+      return;
+    }
+
+    // 画像リクエストの処理
+    if (isImageRequest(url)) {
+      event.respondWith(fetchWithCacheFirst(event.request));
       return;
     }
 
@@ -118,9 +134,9 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
       try {
-        const urlsToCache = STATIC_PATTERNS
-          .filter(pattern => typeof pattern === 'string')
-          .map(url => cache.add(url));
+        // 文字列パターンのキャッシュ
+        const stringPatterns = STATIC_PATTERNS.filter(pattern => typeof pattern === 'string');
+        const urlsToCache = stringPatterns.map(url => cache.add(url));
 
         await Promise.all(urlsToCache);
         console.log('[SW] Initial caching complete');
@@ -129,7 +145,6 @@ self.addEventListener('install', (event) => {
       }
     })
   );
-  // 即座にアクティベート
   self.skipWaiting();
 });
 
