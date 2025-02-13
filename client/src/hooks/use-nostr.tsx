@@ -843,6 +843,81 @@ export function useNostr() {
     }
   }, [user, initialized, isSubscriptionReady, loadFollowingList]);
 
+  interface FetchUserPostsOptions {
+    pubkey: string;
+    since?: number;
+    until?: number;
+    limit?: number;
+    search?: string;
+  }
+
+  // Add to the useNostr hook
+  const fetchUserPosts = useCallback(async ({
+    pubkey,
+    since,
+    until,
+    limit = 30,
+    search
+  }: FetchUserPostsOptions) => {
+    if (!globalRxInstance || !subscriptionReadyRef.current) {
+      throw new Error("Nostr client not ready");
+    }
+
+    debugLog(`Fetching posts for user ${pubkey}`);
+    const filter = {
+      kinds: [KIND.TEXT_NOTE],
+      authors: [pubkey],
+      limit,
+      ...(since && { since }),
+      ...(until && { until }),
+    };
+
+    return new Promise<Post[]>((resolve, reject) => {
+      const posts: Post[] = [];
+      const rxReq = createRxForwardReq();
+
+      const subscription = globalRxInstance!.use(rxReq).subscribe({
+        next: ({ event }) => {
+          if (!seenEvents.current.has(event.id)) {
+            // If search is provided, filter by content
+            if (search && !event.content.toLowerCase().includes(search.toLowerCase())) {
+              return;
+            }
+
+            seenEvents.current.add(event.id);
+            const post: Post = {
+              id: 0,
+              userId: 0,
+              content: event.content,
+              createdAt: new Date(event.created_at * 1000).toISOString(),
+              nostrEventId: event.id!,
+              pubkey: event.pubkey!,
+              signature: event.sig!,
+              metadata: {
+                tags: event.tags || [],
+                relays: DEFAULT_RELAYS,
+              },
+            };
+            posts.push(post);
+          }
+        },
+        error: (error) => {
+          debugLog("Error fetching user posts:", error);
+          reject(error);
+        },
+        complete: () => {
+          debugLog(`Fetched ${posts.length} posts for user ${pubkey}`);
+          resolve(posts);
+        },
+      });
+
+      rxReq.emit(filter);
+
+      return () => subscription.unsubscribe();
+    });
+  }, [debugLog]);
+
+
   return {
     posts: Array.from(posts.values()).sort(
       (a, b) =>
@@ -861,5 +936,6 @@ export function useNostr() {
     isFollowing: useCallback((pubkey: string) => following.has(pubkey), [following]),
     toggleFollow: toggleFollowMutation.mutate,
     isTogglingFollow: toggleFollowMutation.isPending,
+    fetchUserPosts,
   };
 }
