@@ -9,7 +9,7 @@ import HomePage from "@/pages/home-page";
 import ProfilePage from "@/pages/profile-page";
 import { ProtectedRoute } from "./lib/protected-route";
 
-// GitHub Pages用のベースパスを取得（末尾のスラッシュを除去）
+// GitHub Pages用のベースパスを取得（末尾のスラッシュを含めない）
 const base = import.meta.env.DEV ? '' : '/repliNostr';
 
 export default function App() {
