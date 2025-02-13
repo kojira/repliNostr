@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 // @ts-check
 
-const CACHE_NAME = 'nostr-client-v1';
+const CACHE_NAME = 'nostr-client-v2';
 const BASE_URL = self.location.pathname.includes('/repliNostr/') ? '/repliNostr/' : '/';
 
 // Define cache patterns and asset URLs
@@ -41,47 +41,72 @@ function rewriteAssetUrl(url) {
   return url;
 }
 
+// リソースのネットワークファーストフェッチ
+async function fetchWithNetworkFirst(request) {
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(request, response.clone());
+      return response;
+    }
+  } catch (error) {
+    console.log('[SW] Network fetch failed, falling back to cache:', error);
+  }
+
+  const cachedResponse = await caches.match(request);
+  if (cachedResponse) {
+    return cachedResponse;
+  }
+
+  throw new Error('Resource not found in cache and network request failed');
+}
+
+// リソースのキャッシュファーストフェッチ
+async function fetchWithCacheFirst(request) {
+  const cachedResponse = await caches.match(request);
+  if (cachedResponse) {
+    return cachedResponse;
+  }
+
+  const response = await fetch(request);
+  if (response.ok) {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.put(request, response.clone());
+  }
+  return response;
+}
+
+// ナビゲーションリクエストの処理
+function isNavigationRequest(request) {
+  return request.mode === 'navigate' && request.method === 'GET';
+}
+
 self.addEventListener('fetch', (event) => {
   try {
     const url = event.request.url;
     console.log('[SW] Fetching:', url);
 
-    // アセットのリクエストを処理
-    if (url.includes('/assets/')) {
+    // ナビゲーションリクエストの処理
+    if (isNavigationRequest(event.request)) {
       event.respondWith(
-        fetch(rewriteAssetUrl(url))
-          .catch(error => {
-            console.error('[SW] Failed to fetch:', error);
-            return caches.match(event.request);
-          })
+        fetchWithNetworkFirst(event.request)
+          .catch(() => caches.match('/index.html'))
       );
       return;
     }
 
-    // 他のリクエストを処理
+    // アセットのリクエストを処理
+    if (url.includes('/assets/')) {
+      event.respondWith(
+        fetchWithCacheFirst(new Request(rewriteAssetUrl(url)))
+      );
+      return;
+    }
+
+    // その他のリクエストを処理
     event.respondWith(
-      caches.match(event.request)
-        .then(async (response) => {
-          if (response) {
-            console.log('[SW] Serving from cache:', url);
-            return response;
-          }
-
-          try {
-            const fetchResponse = await fetch(event.request);
-            if (!fetchResponse || fetchResponse.status !== 200) {
-              return fetchResponse;
-            }
-
-            const responseToCache = fetchResponse.clone();
-            const cache = await caches.open(CACHE_NAME);
-            await cache.put(event.request, responseToCache);
-            return fetchResponse;
-          } catch (error) {
-            console.error('[SW] Fetch error:', error);
-            throw error;
-          }
-        })
+      fetchWithNetworkFirst(event.request)
     );
   } catch (error) {
     console.error('[SW] General error:', error);
@@ -93,28 +118,35 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
       try {
-        const urls = STATIC_PATTERNS
+        const urlsToCache = STATIC_PATTERNS
           .filter(pattern => typeof pattern === 'string')
           .map(url => cache.add(url));
 
-        await Promise.all(urls);
+        await Promise.all(urlsToCache);
         console.log('[SW] Initial caching complete');
       } catch (error) {
         console.error('[SW] Installation failed:', error);
       }
     })
   );
+  // 即座にアクティベート
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activating Service Worker');
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((cacheName) => cacheName !== CACHE_NAME)
-          .map((cacheName) => caches.delete(cacheName))
-      );
-    })
+    Promise.all([
+      // 古いキャッシュを削除
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames
+            .filter((cacheName) => cacheName !== CACHE_NAME)
+            .map((cacheName) => caches.delete(cacheName))
+        );
+      }),
+      // 新しいService Workerをすぐにアクティベート
+      self.clients.claim()
+    ])
   );
 });
