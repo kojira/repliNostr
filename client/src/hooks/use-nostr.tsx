@@ -882,12 +882,15 @@ export function useNostr() {
       ...(until && { until }),
     };
 
+    debugLog('Using filter:', filter);
+
     return new Promise<Post[]>((resolve, reject) => {
       const posts: Post[] = [];
       const rxReq = createRxForwardReq();
       let receivedCount = 0;
       const timeoutId = setTimeout(() => {
         if (receivedCount === 0) {
+          debugLog('No posts received within timeout period');
           resolve([]); // Return empty array if no posts received
         }
       }, 10000); // 10 second timeout
@@ -895,6 +898,7 @@ export function useNostr() {
       const subscription = globalRxInstance.use(rxReq).subscribe({
         next: ({ event }: { event: NostrEvent }) => {
           if (event.id && event.sig) {
+            debugLog(`Received event: ${event.id}, created_at: ${event.created_at}`);
             // クライアント側で検索文字列によるフィルタリング
             if (search && !event.content.toLowerCase().includes(search.toLowerCase())) {
               return;

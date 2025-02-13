@@ -67,15 +67,18 @@ export default function ProfilePage() {
     const loadInitialPosts = async () => {
       setIsLoadingPosts(true);
       try {
+        console.log('Loading initial posts for pubkey:', pubkey);
         const initialPosts = await fetchUserPosts({
           pubkey,
           limit: 30,
         });
+        console.log('Loaded initial posts:', initialPosts.length);
         setPosts(initialPosts);
         setHasMore(initialPosts.length === 30);
         if (initialPosts.length > 0) {
           const oldestPost = initialPosts[initialPosts.length - 1];
           lastTimestamp.current = Math.floor(new Date(oldestPost.createdAt).getTime() / 1000);
+          console.log('Set last timestamp to:', lastTimestamp.current);
         }
       } catch (error) {
         console.error("Failed to load initial posts:", error);
@@ -100,16 +103,19 @@ export default function ProfilePage() {
       const loadMorePosts = async () => {
         setIsLoadingPosts(true);
         try {
+          console.log('Loading more posts, until:', lastTimestamp.current);
           const morePosts = await fetchUserPosts({
             pubkey: pubkey!,
             until: lastTimestamp.current,
             limit: 30,
           });
+          console.log('Loaded more posts:', morePosts.length);
 
           if (morePosts.length > 0) {
             setPosts(prev => [...prev, ...morePosts]);
             const oldestPost = morePosts[morePosts.length - 1];
             lastTimestamp.current = Math.floor(new Date(oldestPost.createdAt).getTime() / 1000);
+            console.log('Updated last timestamp to:', lastTimestamp.current);
           }
           setHasMore(morePosts.length === 30);
         } catch (error) {
