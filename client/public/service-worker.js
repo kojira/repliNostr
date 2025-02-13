@@ -19,26 +19,13 @@ const STATIC_PATTERNS = [
   `${BASE_URL}manifest.json`,
 ];
 
-// Asset URL rewrite function
-function rewriteAssetUrl(url) {
-  const urlObj = new URL(url);
-
-  // GitHub Pages環境でないなら書き換えない
-  if (!self.location.pathname.includes('/repliNostr/')) {
-    return url;
-  }
-
-  // アセットパスの書き換え
-  if (urlObj.pathname.startsWith('/assets/')) {
-    return urlObj.origin + BASE_URL + 'assets/' + urlObj.pathname.split('/assets/')[1];
-  }
-
-  // その他のパスの書き換え
-  if (!urlObj.pathname.startsWith(BASE_URL)) {
-    return urlObj.origin + BASE_URL + urlObj.pathname.replace(/^\//, '');
-  }
-
-  return url;
+// リクエストがキャッシュ可能かどうかをチェック
+function isCacheableRequest(request) {
+  return (
+    request.url.startsWith('http') &&
+    !request.url.startsWith('chrome-extension:') &&
+    request.method === 'GET'
+  );
 }
 
 // 画像ファイルかどうかを判定
@@ -46,8 +33,17 @@ function isImageRequest(url) {
   return url.match(/\.(png|jpg|jpeg|gif|webp|ico|svg)$/i);
 }
 
+// ナビゲーションリクエストの処理
+function isNavigationRequest(request) {
+  return request.mode === 'navigate' && request.method === 'GET';
+}
+
 // リソースのネットワークファーストフェッチ
 async function fetchWithNetworkFirst(request) {
+  if (!isCacheableRequest(request)) {
+    return fetch(request);
+  }
+
   try {
     const response = await fetch(request);
     if (response.ok) {
@@ -57,7 +53,7 @@ async function fetchWithNetworkFirst(request) {
     }
 
     // 404エラーの場合、index.htmlを返す
-    if (response.status === 404 && request.mode === 'navigate') {
+    if (response.status === 404 && isNavigationRequest(request)) {
       const indexResponse = await caches.match(BASE_URL + 'index.html');
       if (indexResponse) {
         return indexResponse;
@@ -73,7 +69,7 @@ async function fetchWithNetworkFirst(request) {
     }
 
     // ナビゲーションリクエストの場合、index.htmlにフォールバック
-    if (request.mode === 'navigate') {
+    if (isNavigationRequest(request)) {
       const indexResponse = await caches.match(BASE_URL + 'index.html');
       if (indexResponse) {
         return indexResponse;
@@ -86,6 +82,10 @@ async function fetchWithNetworkFirst(request) {
 
 // リソースのキャッシュファーストフェッチ
 async function fetchWithCacheFirst(request) {
+  if (!isCacheableRequest(request)) {
+    return fetch(request);
+  }
+
   const cachedResponse = await caches.match(request);
   if (cachedResponse) {
     return cachedResponse;
@@ -104,16 +104,15 @@ async function fetchWithCacheFirst(request) {
   }
 }
 
-// ナビゲーションリクエストの処理
-function isNavigationRequest(request) {
-  return request.mode === 'navigate' && request.method === 'GET';
-}
-
 self.addEventListener('fetch', (event) => {
   try {
     const url = event.request.url;
     console.log('[SW] Fetching:', url);
 
+    // chrome-extension関連のリクエストはスキップ
+    if (!isCacheableRequest(event.request)) {
+      return;
+    }
 
     // 画像リクエストの処理
     if (isImageRequest(url)) {
@@ -123,16 +122,12 @@ self.addEventListener('fetch', (event) => {
 
     // アセットのリクエストを処理
     if (url.includes('/assets/')) {
-      event.respondWith(
-        fetchWithCacheFirst(new Request(rewriteAssetUrl(url)))
-      );
+      event.respondWith(fetchWithCacheFirst(event.request));
       return;
     }
 
     // その他のリクエストを処理（ナビゲーションリクエストを含む）
-    event.respondWith(
-      fetchWithNetworkFirst(event.request)
-    );
+    event.respondWith(fetchWithNetworkFirst(event.request));
   } catch (error) {
     console.error('[SW] General error:', error);
   }
