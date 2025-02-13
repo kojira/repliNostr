@@ -874,7 +874,7 @@ export function useNostr() {
       throw new Error("Nostr client not ready");
     }
 
-    debugLog(`Fetching posts for user ${pubkey}`);
+    debugLog(`Fetching posts for user ${pubkey}, since=${since}, until=${until}, limit=${limit}`);
     const filter: RelayRequest = {
       kinds: [KIND.TEXT_NOTE],
       authors: [pubkey],
@@ -889,63 +889,84 @@ export function useNostr() {
       const posts: Post[] = [];
       const rxReq = createRxForwardReq();
       let receivedCount = 0;
+      let isCompleted = false;
+
       const timeoutId = setTimeout(() => {
-        if (receivedCount === 0) {
-          debugLog('No posts received within timeout period');
-          resolve([]); // Return empty array if no posts received
+        if (!isCompleted) {
+          debugLog('Fetch timeout reached');
+          isCompleted = true;
+          subscription?.unsubscribe();
+          resolve(posts);
         }
-      }, 10000); // 10 second timeout
+      }, 15000); // 15秒のタイムアウト
 
       const subscription = globalRxInstance!.use(rxReq).subscribe({
         next: ({ event }: { event: NostrEvent }) => {
-          if (event.id && event.sig) {
-            debugLog(`Received event: ${event.id}, created_at: ${event.created_at}`);
-            // クライアント側で検索文字列によるフィルタリング
-            if (search && !event.content.toLowerCase().includes(search.toLowerCase())) {
-              return;
-            }
-            receivedCount++;
-            const post: Post = {
-              id: 0,
-              userId: 0,
-              content: event.content,
-              createdAt: new Date(event.created_at * 1000).toISOString(),
-              nostrEventId: event.id,
-              pubkey: event.pubkey!,
-              signature: event.sig,
-              metadata: {
-                tags: event.tags || [],
-                relays: DEFAULT_RELAYS,
-              },
-            };
-            posts.push(post);
+          if (isCompleted) return;
+
+          debugLog(`Received event: ${event.id}, created_at: ${event.created_at}`);
+          if (!event.id || !event.sig) {
+            debugLog('Invalid event received (missing id or signature)');
+            return;
           }
+
+          // クライアント側で検索文字列によるフィルタリング
+          if (search && !event.content.toLowerCase().includes(search.toLowerCase())) {
+            debugLog(`Event filtered out by search: ${search}`);
+            return;
+          }
+
+          receivedCount++;
+          const post: Post = {
+            id: 0,
+            userId: 0,
+            content: event.content,
+            createdAt: new Date(event.created_at * 1000).toISOString(),
+            nostrEventId: event.id,
+            pubkey: event.pubkey!,
+            signature: event.sig,
+            metadata: {
+              tags: event.tags || [],
+              relays: DEFAULT_RELAYS,
+            },
+          };
+          posts.push(post);
+          debugLog(`Added post ${event.id}, total posts: ${posts.length}`);
         },
         error: (error: Error) => {
           debugLog("Error fetching user posts:", error);
-          clearTimeout(timeoutId);
-          reject(error);
+          if (!isCompleted) {
+            isCompleted = true;
+            clearTimeout(timeoutId);
+            reject(error);
+          }
         },
         complete: () => {
-          clearTimeout(timeoutId);
-          debugLog(`Fetched ${posts.length} posts for user ${pubkey}`);
-          // Sort posts by timestamp before returning
-          posts.sort((a, b) => 
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-          resolve(posts);
+          debugLog(`Fetch completed, received ${posts.length} posts`);
+          if (!isCompleted) {
+            isCompleted = true;
+            clearTimeout(timeoutId);
+            // タイムスタンプでソート
+            posts.sort((a, b) => 
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            resolve(posts);
+          }
         },
       });
 
+      debugLog('Emitting filter to relays');
       rxReq.emit(filter);
 
       return () => {
-        subscription.unsubscribe();
-        clearTimeout(timeoutId);
+        if (!isCompleted) {
+          debugLog('Cleaning up subscription');
+          clearTimeout(timeoutId);
+          subscription.unsubscribe();
+        }
       };
     });
   }, [debugLog]);
-
 
 
   return {

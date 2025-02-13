@@ -67,21 +67,20 @@ export default function ProfilePage() {
     const loadInitialPosts = async () => {
       setIsLoadingPosts(true);
       try {
-        console.log('Loading initial posts for pubkey:', pubkey);
         const initialPosts = await fetchUserPosts({
           pubkey,
           limit: 30,
         });
-        console.log('Loaded initial posts:', initialPosts.length);
+        console.info(`[Profile] Loaded ${initialPosts.length} initial posts for user ${pubkey}`);
         setPosts(initialPosts);
         setHasMore(initialPosts.length === 30);
         if (initialPosts.length > 0) {
           const oldestPost = initialPosts[initialPosts.length - 1];
           lastTimestamp.current = Math.floor(new Date(oldestPost.createdAt).getTime() / 1000);
-          console.log('Set last timestamp to:', lastTimestamp.current);
+          console.info(`[Profile] Set last timestamp to ${new Date(oldestPost.createdAt).toISOString()}`);
         }
       } catch (error) {
-        console.error("Failed to load initial posts:", error);
+        console.error("[Profile] Failed to load initial posts:", error);
       } finally {
         setIsLoadingPosts(false);
       }
@@ -103,23 +102,25 @@ export default function ProfilePage() {
       const loadMorePosts = async () => {
         setIsLoadingPosts(true);
         try {
-          console.log('Loading more posts, until:', lastTimestamp.current);
+          console.info(`[Profile] Loading more posts before timestamp ${new Date(lastTimestamp.current! * 1000).toISOString()}`);
           const morePosts = await fetchUserPosts({
             pubkey: pubkey!,
             until: lastTimestamp.current,
             limit: 30,
           });
-          console.log('Loaded more posts:', morePosts.length);
 
           if (morePosts.length > 0) {
+            console.info(`[Profile] Loaded ${morePosts.length} more posts`);
             setPosts(prev => [...prev, ...morePosts]);
             const oldestPost = morePosts[morePosts.length - 1];
             lastTimestamp.current = Math.floor(new Date(oldestPost.createdAt).getTime() / 1000);
-            console.log('Updated last timestamp to:', lastTimestamp.current);
+            console.info(`[Profile] Updated last timestamp to ${new Date(oldestPost.createdAt).toISOString()}`);
+          } else {
+            console.info('[Profile] No more posts available');
           }
           setHasMore(morePosts.length === 30);
         } catch (error) {
-          console.error("Failed to load more posts:", error);
+          console.error("[Profile] Failed to load more posts:", error);
         } finally {
           setIsLoadingPosts(false);
         }
