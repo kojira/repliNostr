@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Page Not Found</title>
+    <script>
+        // デバッグログ
+        console.log('[404] Initial state:', {
+            fullUrl: window.location.href,
+            origin: window.location.origin,
+            pathname: window.location.pathname,
+            search: window.location.search,
+            hash: window.location.hash
+        });
+
+        // GitHub Pages環境のみで実行
+        if (location.hostname.includes('github.io')) {
+            console.log('[404] GitHub Pages environment detected');
+
+            const baseUrl = '/repliNostr/';  // index.htmlと同じ形式に統一
+            console.log('[404] Using base URL:', baseUrl);
+
+            // 現在のURLをそのまま保存
+            sessionStorage.redirect = window.location.href;
+            console.log('[404] Saved to sessionStorage:', {
+                redirect: sessionStorage.redirect,
+                pathname: window.location.pathname,
+                baseUrl: baseUrl
+            });
+
+            // SPAのルートにリダイレクト
+            const redirectUrl = window.location.origin + baseUrl;
+            console.log('[404] Redirecting to:', {
+                url: redirectUrl,
+                fullUrl: window.location.href
+            });
+            window.location.replace(redirectUrl);
+        } else {
+            console.log('[404] Development environment detected, redirecting to root');
+            window.location.replace('/');
+        }
+    </script>
+</head>
+<body>
+    <h1>Page Not Found</h1>
+    <p>Redirecting...</p>
+</body>
+</html>
