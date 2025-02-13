@@ -1,8 +1,8 @@
 /// <reference lib="webworker" />
-declare const self: ServiceWorkerGlobalScope;
+// @ts-check
 
 const CACHE_NAME = 'nostr-client-v1';
-const BASE_URL = '/repliNostr/';  // GitHub Pages base path
+const BASE_URL = self.location.pathname.includes('/repliNostr/') ? '/repliNostr/' : '/';
 
 // Define cache patterns and asset URLs
 const STATIC_PATTERNS = [
@@ -20,8 +20,13 @@ const STATIC_PATTERNS = [
 ];
 
 // Asset URL rewrite function - handles both development and production
-function rewriteAssetUrl(url: string): string {
+function rewriteAssetUrl(url) {
   const urlObj = new URL(url);
+
+  // Do not rewrite URLs in development
+  if (!self.location.pathname.includes('/repliNostr/')) {
+    return url;
+  }
 
   // Handle /assets/ paths
   if (urlObj.pathname.startsWith('/assets/')) {
@@ -38,58 +43,64 @@ function rewriteAssetUrl(url: string): string {
 }
 
 self.addEventListener('fetch', (event) => {
-  const url = event.request.url;
+  try {
+    const url = event.request.url;
+    console.log('[SW] Fetching:', url);
 
-  // Rewrite asset URLs
-  if (url.includes('/assets/')) {
-    const rewrittenUrl = rewriteAssetUrl(url);
-    event.respondWith(
-      fetch(rewrittenUrl)
-        .then(response => {
-          if (!response || response.status !== 200) {
-            console.error(`[SW] Failed to fetch: ${url}, trying cache`);
+    // Rewrite asset URLs
+    if (url.includes('/assets/')) {
+      event.respondWith(
+        fetch(rewriteAssetUrl(url))
+          .then(response => {
+            if (!response || response.status !== 200) {
+              console.error(`[SW] Failed to fetch: ${url}, trying cache`);
+              return caches.match(event.request);
+            }
+            return response;
+          })
+          .catch(error => {
+            console.error('[SW] Failed to fetch:', error);
             return caches.match(event.request);
-          }
+          })
+      );
+      return;
+    }
+
+    // Handle other requests
+    event.respondWith(
+      caches.match(event.request).then(async (response) => {
+        if (response) {
+          console.log('[SW] Serving from cache:', url);
           return response;
-        })
-        .catch(error => {
-          console.error('[SW] Failed to fetch:', error);
-          return caches.match(event.request);
-        })
-    );
-    return;
-  }
-
-  // Handle other requests
-  event.respondWith(
-    caches.match(event.request).then(async (response) => {
-      if (response) {
-        return response;
-      }
-
-      try {
-        const fetchResponse = await fetch(event.request);
-        if (!fetchResponse || fetchResponse.status !== 200 || fetchResponse.type !== 'basic') {
-          return fetchResponse;
         }
 
-        const responseToCache = fetchResponse.clone();
-        const cache = await caches.open(CACHE_NAME);
+        try {
+          const fetchResponse = await fetch(event.request);
+          if (!fetchResponse || fetchResponse.status !== 200 || fetchResponse.type !== 'basic') {
+            return fetchResponse;
+          }
 
-        // Store with proper base path
-        const url = new URL(event.request.url);
-        const cacheKey = url.pathname.startsWith(BASE_URL) 
-          ? url.pathname 
-          : BASE_URL + url.pathname.replace(/^\//, '');
+          const responseToCache = fetchResponse.clone();
+          const cache = await caches.open(CACHE_NAME);
 
-        await cache.put(new Request(cacheKey), responseToCache);
-        return fetchResponse;
-      } catch (error) {
-        console.error('[SW] Fetch error:', error);
-        throw error;
-      }
-    })
-  );
+          // Store with proper base path
+          const urlObj = new URL(event.request.url);
+          const cacheKey = urlObj.pathname.startsWith(BASE_URL) 
+            ? urlObj.pathname 
+            : BASE_URL + urlObj.pathname.replace(/^\//, '');
+
+          await cache.put(new Request(cacheKey), responseToCache);
+          console.log('[SW] Cached new resource:', url);
+          return fetchResponse;
+        } catch (error) {
+          console.error('[SW] Fetch error:', error);
+          throw error;
+        }
+      })
+    );
+  } catch (error) {
+    console.error('[SW] General error:', error);
+  }
 });
 
 self.addEventListener('install', (event) => {
@@ -132,5 +143,3 @@ self.addEventListener('activate', (event) => {
     })
   );
 });
-
-export {};

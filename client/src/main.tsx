@@ -18,7 +18,7 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
       // Register service worker with the correct path
-      const swUrl = `${baseUrl}service-worker.js`;
+      const swUrl = import.meta.env.DEV ? '/service-worker.js' : `${baseUrl}service-worker.js`;
       console.log('[SW] Registering service worker at:', swUrl);
       const registration = await navigator.serviceWorker.register(swUrl, {
         scope: baseUrl
