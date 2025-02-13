@@ -8,18 +8,25 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/repliNostr/service-worker.js', {
       scope: '/repliNostr/'
     }).then(registration => {
-      console.log('SW registered:', registration);
+      console.log('[SW] Registration successful:', registration);
     }).catch(error => {
-      console.log('SW registration failed:', error);
+      console.log('[SW] Registration failed:', error);
     });
   });
 }
 
-// Initialize base URL for assets
-const baseUrl = import.meta.env.VITE_BASE_URL || '/repliNostr/';
+// Get base URL from environment variables
+const baseUrl = '/repliNostr/';
 if (window.__ENV) {
   window.__ENV.BASE_URL = baseUrl;
   window.__ENV.ASSET_URL = `${baseUrl}assets/`;
 }
+
+// Debug logging
+console.log('[Debug] Environment:', {
+  baseUrl,
+  env: window.__ENV,
+  currentUrl: window.location.href
+});
 
 createRoot(document.getElementById("root")!).render(<App />);
