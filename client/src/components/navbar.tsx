@@ -16,20 +16,21 @@ export default function Navbar() {
   if (!user) return null;
 
   return (
-    <header className="border-b">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        <h1 className="text-xl font-bold">Nostr Client</h1>
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container mx-auto px-4 h-14 flex items-center justify-between">
+        <h1 className="text-lg font-semibold sm:text-xl">Nostr Client</h1>
         <Sheet>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" className="shrink-0">
               <MenuIcon className="h-5 w-5" />
+              <span className="sr-only">メニューを開く</span>
             </Button>
           </SheetTrigger>
-          <SheetContent>
-            <SheetHeader>
-              <SheetTitle>メニュー</SheetTitle>
+          <SheetContent side="right" className="w-[280px] sm:w-[320px] px-4">
+            <SheetHeader className="mb-4">
+              <SheetTitle className="text-left">メニュー</SheetTitle>
             </SheetHeader>
-            <div className="mt-4 space-y-6">
+            <div className="space-y-6">
               <UserProfile />
               <Button 
                 variant="outline" 
