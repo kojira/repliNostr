@@ -9,10 +9,22 @@
         <script type="module" src="src/main.tsx"></script>
         <script>
             // Handle GitHub Pages asset paths
+            const isGitHubPages = window.location.hostname.includes('github.io');
+            const baseUrl = isGitHubPages ? '/repliNostr/' : '/';
             window.__ENV = {
-                BASE_URL: '/repliNostr/',
-                ASSET_URL: '/repliNostr/assets/'
+                BASE_URL: baseUrl,
+                ASSET_URL: `${baseUrl}assets/`
             };
+
+            // Handle redirects from 404.html
+            const redirect = sessionStorage.redirect;
+            if (redirect) {
+                console.log('Handling redirect from:', redirect);
+                delete sessionStorage.redirect;
+                if (redirect !== window.location.href) {
+                    history.replaceState(null, '', redirect);
+                }
+            }
         </script>
     </head>
     <body class="min-h-screen bg-background font-sans antialiased">

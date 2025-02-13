@@ -13,22 +13,31 @@
         if (location.hostname.includes('github.io')) {
             console.log('404 - GitHub Pages environment detected');
             const url = window.location.href;
+            const baseUrl = '/repliNostr/';
 
             // アセットファイルへのアクセスの場合
             if (url.includes('/assets/')) {
                 console.log('404 - Asset request detected');
-                // /repliNostr/assets/へのパスを修正
-                const newPath = url.replace(/\/assets\//, '/repliNostr/assets/');
+                // アセットパスを修正
+                const assetPath = url.split('/assets/')[1];
+                const newPath = `${window.location.origin}${baseUrl}assets/${assetPath}`;
+                console.log('404 - Redirecting asset to:', newPath);
                 window.location.replace(newPath);
             } else {
                 // 通常のページアクセスの場合
-                // 既にsessionStorageにリダイレクト情報がある場合は無限ループを防ぐ
-                if (!sessionStorage.redirect) {
-                    sessionStorage.redirect = url;
-                    window.location.replace(window.location.origin + '/repliNostr/');
+                const pathname = window.location.pathname;
+                const search = window.location.search;
+                const hash = window.location.hash;
+
+                // /repliNostr/が含まれていない場合は追加
+                if (!pathname.includes(baseUrl)) {
+                    const newPath = `${window.location.origin}${baseUrl}${pathname.replace(/^\//, '')}${search}${hash}`;
+                    console.log('404 - Redirecting to:', newPath);
+                    window.location.replace(newPath);
                 } else {
-                    console.log('404 - Redirect loop detected, clearing sessionStorage');
-                    sessionStorage.removeItem('redirect');
+                    // /repliNostr/が既に含まれている場合はそのままSPAにリダイレクト
+                    console.log('404 - Base path already present, redirecting to SPA root');
+                    window.location.replace(`${window.location.origin}${baseUrl}`);
                 }
             }
         } else {
