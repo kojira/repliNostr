@@ -116,6 +116,7 @@ export function useNostr() {
   const [isSubscriptionReady, setIsSubscriptionReady] = useState(false);
   const subscriptionReadyRef = useRef(false);
   const previousUserRef = useRef(user);
+  const [following, setFollowing] = useState<Set<string>>(new Set());
 
   const debugLog = useCallback((message: string, ...args: any[]) => {
     if (DEBUG) {
@@ -134,6 +135,7 @@ export function useNostr() {
     isInitialLoadComplete.current = false;
     seenEvents.current.clear();
     setPosts(new Map());
+    setFollowing(new Set());
   }, [debugLog]);
 
   // ユーザー変更の監視
@@ -691,6 +693,156 @@ export function useNostr() {
     },
   });
 
+  // Nostrのkind定義
+  const KIND = {
+    METADATA: 0,
+    TEXT_NOTE: 1,
+    CONTACT_LIST: 3,
+  } as const;
+
+  // フォロー状態の管理
+  interface Contact {
+    pubkey: string;
+    relayUrl?: string;
+    petname?: string;
+  }
+
+  // フォロー状態の取得
+  const loadFollowingList = useCallback(async () => {
+    if (!user || !globalRxInstance) return;
+
+    debugLog("Loading following list");
+    const filter = {
+      kinds: [KIND.CONTACT_LIST],
+      authors: [user.publicKey],
+    };
+
+    return new Promise<void>((resolve, reject) => {
+      const rxReq = createRxForwardReq();
+      let hasReceivedList = false;
+
+      const subscription = globalRxInstance.use(rxReq).subscribe({
+        next: ({ event }) => {
+          if (hasReceivedList) return;
+
+          try {
+            const contacts: Contact[] = event.tags
+              .filter(tag => tag[0] === 'p')
+              .map(tag => ({
+                pubkey: tag[1],
+                relayUrl: tag[2],
+                petname: tag[3],
+              }));
+
+            setFollowing(new Set(contacts.map(contact => contact.pubkey)));
+            hasReceivedList = true;
+            resolve();
+          } catch (error) {
+            debugLog("Error processing contact list:", error);
+            reject(error);
+          }
+        },
+        error: (error) => {
+          debugLog("Error loading following list:", error);
+          reject(error);
+        },
+        complete: () => {
+          if (!hasReceivedList) {
+            debugLog("No contact list found");
+            resolve();
+          }
+        },
+      });
+
+      rxReq.emit(filter);
+
+      return () => subscription.unsubscribe();
+    });
+  }, [user, debugLog]);
+
+  // フォロー/アンフォロー機能
+  const toggleFollowMutation = useMutation({
+    mutationFn: async (targetPubkey: string) => {
+      if (!user || !globalRxInstance) {
+        throw new Error("Not ready to update follows");
+      }
+
+      const isFollowing = following.has(targetPubkey);
+      const newFollowList = isFollowing
+        ? Array.from(following).filter(key => key !== targetPubkey)
+        : [...Array.from(following), targetPubkey];
+
+      const tags = newFollowList.map(pubkey => ['p', pubkey]);
+
+      const event = {
+        kind: KIND.CONTACT_LIST,
+        content: '',
+        tags,
+        created_at: Math.floor(Date.now() / 1000),
+      };
+
+      debugLog(`${isFollowing ? 'Unfollowing' : 'Following'} ${targetPubkey}`);
+
+      return new Promise<void>((resolve, reject) => {
+        let successCount = 0;
+        let failureCount = 0;
+        const totalRelays = DEFAULT_RELAYS.length;
+
+        globalRxInstance!.send(event).subscribe({
+          next: (packet) => {
+            debugLog(`Relay response from ${packet.from}:`, packet);
+            if (packet.ok) {
+              debugLog(`Follow update sent successfully to ${packet.from}`);
+              successCount++;
+
+              if (successCount === 1) {
+                setFollowing(new Set(newFollowList));
+                resolve();
+              }
+            } else {
+              debugLog(`Failed to send follow update to ${packet.from}`);
+              failureCount++;
+            }
+
+            if (successCount + failureCount === totalRelays) {
+              debugLog(`Follow update completed. Success: ${successCount}, Failed: ${failureCount}`);
+              if (successCount === 0) {
+                reject(new Error("Failed to send to all relays"));
+              }
+            }
+          },
+          error: (error) => {
+            debugLog("Error sending follow update:", error);
+            reject(error);
+          },
+        });
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "成功",
+        description: "フォロー状態を更新しました",
+      });
+    },
+    onError: (error) => {
+      console.error("Error updating follow status:", error);
+      toast({
+        title: "エラー",
+        description: "フォロー状態の更新に失敗しました",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // useEffect hook for loading following list
+  useEffect(() => {
+    if (user && initialized && isSubscriptionReady) {
+      loadFollowingList().catch(error => {
+        console.error("Error loading following list:", error);
+      });
+    }
+  }, [user, initialized, isSubscriptionReady, loadFollowingList]);
+
   return {
     posts: Array.from(posts.values()).sort(
       (a, b) =>
@@ -706,5 +858,8 @@ export function useNostr() {
     isCreatingPost: createPostMutation.isPending,
     updateProfile: updateProfileMutation.mutate,
     isUpdatingProfile: updateProfileMutation.isPending,
+    isFollowing: useCallback((pubkey: string) => following.has(pubkey), [following]),
+    toggleFollow: toggleFollowMutation.mutate,
+    isTogglingFollow: toggleFollowMutation.isPending,
   };
 }

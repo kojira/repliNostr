@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useLocation } from "wouter";
 
 interface PostCardProps {
   post: Post;
@@ -32,6 +33,7 @@ function PostCard({ post, priority = false }: PostCardProps) {
   const [isLoading, setIsLoading] = useState(!priority);
   const [showJson, setShowJson] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [, setLocation] = useLocation();
   const { ref, inView } = useInView({
     threshold: 0,
     triggerOnce: true
@@ -62,7 +64,10 @@ function PostCard({ post, priority = false }: PostCardProps) {
     }
 
     return (
-      <Avatar className="h-10 w-10">
+      <Avatar 
+        className="h-10 w-10 cursor-pointer hover:opacity-80 transition-opacity"
+        onClick={() => setLocation(`/profile/${post.pubkey}`)}
+      >
         {metadata?.picture ? (
           <AvatarImage 
             src={metadata.picture} 
@@ -85,6 +90,10 @@ function PostCard({ post, priority = false }: PostCardProps) {
     setDropdownOpen(false);
   };
 
+  const handleNameClick = () => {
+    setLocation(`/profile/${post.pubkey}`);
+  };
+
   return (
     <>
       <Card ref={ref} className={cn(isLoading && "opacity-70")}>
@@ -94,7 +103,10 @@ function PostCard({ post, priority = false }: PostCardProps) {
             {isLoading ? (
               <Skeleton className="h-4 w-24" />
             ) : (
-              <p className="font-semibold">
+              <p 
+                className="font-semibold cursor-pointer hover:underline"
+                onClick={handleNameClick}
+              >
                 {metadata?.name || `nostr:${shortPubkey}`}
               </p>
             )}
