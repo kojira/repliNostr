@@ -5,10 +5,11 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <base href="/repliNostr/" />
         <script>
-            // Define environment variables
+            // Define environment variables with proper base path handling
+            const basePath = '/repliNostr/';
             window.__ENV = {
-                BASE_URL: "/repliNostr/",
-                ASSET_URL: "/repliNostr/assets/"
+                BASE_URL: basePath,
+                ASSET_URL: `${basePath}assets/`
             };
 
             // Debug logging with clearer messages
@@ -33,27 +34,21 @@
 
                         if (redirect !== location.href) {
                             console.log("[Debug] Redirecting from:", redirect);
-                            // Ensure path is relative to /repliNostr/
-                            const baseUrl = window.__ENV.BASE_URL;
-                            const newPath = redirect.replace(
-                                location.origin,
-                                "",
-                            );
+                            const newPath = redirect.replace(location.origin, "");
                             console.log("[Debug] New path:", newPath);
-                            history.replaceState(null, null, baseUrl + newPath);
+                            history.replaceState(null, null, basePath + newPath.replace(/^\/repliNostr/, ''));
                         }
                     }
                 } else {
-                    console.log(
-                        "[Debug] Development environment - no redirect needed",
-                    );
+                    console.log("[Debug] Development environment - no redirect needed");
                 }
             })();
         </script>
         <title>Nostr Client</title>
+        <link rel="manifest" href="/repliNostr/manifest.json" />
     </head>
-    <body>
+    <body class="min-h-screen bg-background font-sans antialiased">
         <div id="root"></div>
-        <script type="module" src="./src/main.tsx"></script>
+        <script type="module" src="src/main.tsx"></script>
     </body>
 </html>
